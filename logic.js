@@ -47,6 +47,7 @@ export function analyzeRace(horses, isGradeRace = false) {
         else if (rank === 'B' && ev >= 2.000 && ev <= 4.500) h.cls = 'B3';
         else if (rank === 'A' && ev >= 1.000 && ev <= 1.250) h.cls = 'A2';
         else if (rank === 'D' && ev >= 1.300 && ev <= 1.999) h.cls = 'D1';
+        else h.cls = 'N';
     });
 
     // 3. SS密度と推奨度の判定
