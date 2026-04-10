@@ -449,6 +449,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         let csvContent = '\uFEFF';
+        csvContent += "日付,レース名,コース詳細,グレード・頭数,馬番,馬名,購入時人気,購入時オッズ,評価,購入時期待値,購入時クラス,最終確定人気,最終確定オッズ,最終確定期待値,最終確定クラス,着順,MAO,実行フラグ,単勝払戻,ワイド払戻,三連複払戻\r\n";
 
         let tanshoPay = (lastResultData && lastResultData.payouts && lastResultData.payouts['単勝']) ? lastResultData.payouts['単勝'].replace(/,/g, '') : "";
         let widePay = (lastResultData && lastResultData.payouts && lastResultData.payouts['ワイド']) ? lastResultData.payouts['ワイド'].replace(/円/g, "円 ").replace(/,/g, '').trim() : "";
