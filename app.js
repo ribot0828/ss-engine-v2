@@ -235,13 +235,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 </td>
                 <td class="px-4 py-2 border-b border-slate-700 text-center">
                     <select class="bg-slate-800 text-white px-2 py-1 rounded rank-select border border-slate-600" data-idx="${idx}">
-                        <option value="S">S</option>
-                        <option value="A">A</option>
-                        <option value="B" selected>B</option>
-                        <option value="C">C</option>
-                        <option value="D">D</option>
-                        <option value="E">E</option>
-                        <option value="F">F</option>
+                        ${['S','A','B','C','D','E','F'].map(r => `<option value="${r}" ${horse.rank === r ? 'selected' : ''}>${r}</option>`).join('')}
                     </select>
                 </td>
             `;
