@@ -56,6 +56,7 @@ class handler(BaseHTTPRequestHandler):
         date_info = date_elem.text.strip() if date_elem else ""
 
         horses = []
+        seen_umaban = set()
         rows = soup.select(".HorseList")
         is_result_page = 'result.html' in url
 
@@ -96,6 +97,10 @@ class handler(BaseHTTPRequestHandler):
                     odds = float(odds_text)
                 except ValueError:
                     odds = 0.0
+
+                if umaban in seen_umaban:
+                    continue
+                seen_umaban.add(umaban)
 
                 horses.append({
                     "umaban": umaban,
