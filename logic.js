@@ -15,12 +15,12 @@ export function analyzeRace(horses, isGradeRace = false) {
     // 1. 各馬のスコアと予想勝率、期待値の計算
     let totalScore = 0;
     horses.forEach(h => {
-        h.score = SCORE_MAP[h.rank] || 0;
+        h.score = (h.odds > 0) ? (SCORE_MAP[h.rank] || 0) : 0;
         totalScore += h.score;
     });
 
     horses.forEach(h => {
-        h.winRate = totalScore > 0 ? h.score / totalScore : 0;
+        h.winRate = (totalScore > 0 && h.odds > 0) ? h.score / totalScore : 0;
         h.rawEv = h.winRate * h.odds;
         h.ev = truncateTo3(h.rawEv);
         h.cls = null; // Class
@@ -59,7 +59,8 @@ export function analyzeRace(horses, isGradeRace = false) {
         }
     });
     
-    const denom = Math.max(12, horses.length);
+    const activeHorsesCount = horses.filter(h => h.odds > 0).length;
+    const denom = Math.max(12, activeHorsesCount);
     const ssDensity = truncateTo3(ssTargetCount / denom);
 
     const axisCandidatesSet = new Set(['S0', 'S1', 'S2', 'A0', 'B0+', 'A1', 'C0']);
