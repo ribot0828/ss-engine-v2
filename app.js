@@ -260,13 +260,77 @@ document.addEventListener('DOMContentLoaded', () => {
         analyzeBtn.disabled = false;
     };
 
-    analyzeBtn.addEventListener('click', () => {
+    analyzeBtn.addEventListener('click', async () => {
         if (currentHorses.length === 0) return;
         
         saveToHistory();
         const result = analyzeRace(currentHorses, isGradeRace);
         renderResults(result);
+
+        // X/D1 近走監査 (Striker Validation)
+        const xd1Horses = result.winTargets.filter(h => h.cls === 'X' || h.cls === 'D1');
+        if (xd1Horses.length > 0) {
+            const currentGrade = savedGradeInfo.split(' ')[0] || '';
+            const winList = document.getElementById('winTargets');
+            
+            for (const h of xd1Horses) {
+                if (!h.horse_id) continue;
+                
+                try {
+                    const res = await fetch(`/api/index?action=horse_history&horse_id=${h.horse_id}`);
+                    const data = await res.json();
+                    
+                    if (data.races && data.races.length > 0) {
+                        let passed = false;
+                        let matchInfo = '';
+                        
+                        for (const race of data.races) {
+                            const sameGrade = isGradeSimilar(currentGrade, race.grade);
+                            if (sameGrade && race.time_diff <= 1.0) {
+                                passed = true;
+                                const finishStr = race.finish === '1' ? '1着' : `${race.time_diff}秒差`;
+                                matchInfo = `${race.race_name} (${finishStr})`;
+                                break;
+                            }
+                        }
+                        
+                        h.strikerPassed = passed;
+                        h.strikerInfo = matchInfo;
+                        
+                        const badge = passed
+                            ? `<span class="text-green-400 ml-2">✅近走監査通過: ${matchInfo}</span>`
+                            : `<span class="text-red-400 ml-2">⚠️近走監査不通過（単勝見送り推奨）</span>`;
+                        
+                        const items = winList.querySelectorAll('li');
+                        items.forEach(li => {
+                            if (li.textContent.includes(`馬番 ${h.umaban} `)) {
+                                li.innerHTML += badge;
+                            }
+                        });
+                    }
+                } catch (err) {
+                    console.error(`Striker validation error for ${h.name}:`, err);
+                }
+            }
+        }
     });
+
+    const isGradeSimilar = (currentGrade, pastGrade) => {
+        if (!currentGrade || !pastGrade) return false;
+        const normalize = (g) => {
+            g = g.replace(/\s+/g, '').replace(/クラス/g, '勝');
+            if (g.includes('G1') || g.includes('GⅠ') || g.includes('GI')) return 'G1';
+            if (g.includes('G2') || g.includes('GⅡ') || g.includes('GII')) return 'G2';
+            if (g.includes('G3') || g.includes('GⅢ') || g.includes('GIII')) return 'G3';
+            if (g.includes('OP') || g.includes('オープン') || g.includes('L')) return 'OP';
+            if (g.includes('3勝')) return '3勝';
+            if (g.includes('2勝')) return '2勝';
+            if (g.includes('1勝')) return '1勝';
+            if (g.includes('未勝利') || g.includes('新馬')) return '未勝利';
+            return g;
+        };
+        return normalize(currentGrade) === normalize(pastGrade);
+    };
 
     const renderResults = (res) => {
         resultsPanel.style.display = 'block';
