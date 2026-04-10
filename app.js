@@ -12,8 +12,15 @@ document.addEventListener('DOMContentLoaded', () => {
     const resultsPanel = document.getElementById('resultsPanel');
     const historySelect = document.getElementById('historySelect');
     const deleteHistoryBtn = document.getElementById('deleteHistoryBtn');
+    const resultUrlInput = document.getElementById('resultUrlInput');
+    const mergeResultBtn = document.getElementById('mergeResultBtn');
+    const exportCsvBtn = document.getElementById('exportCsvBtn');
+    const resultStatusText = document.getElementById('resultStatusText');
 
     let currentHorses = [];
+    let savedGradeInfo = "";
+    let savedDateInfo = "";
+    let lastResultData = null;
     let isGradeRace = false; 
     let lastFetchedUrl = "";
     let autoUpdateInterval = null;
@@ -47,6 +54,8 @@ document.addEventListener('DOMContentLoaded', () => {
             url: lastFetchedUrl,
             raceName: document.getElementById('raceTitle').textContent,
             courseInfo: document.getElementById('raceCourse').textContent,
+            gradeInfo: savedGradeInfo,
+            dateInfo: savedDateInfo,
             horses: JSON.parse(JSON.stringify(currentHorses)),
             timestamp: new Date().getTime(),
             isGradeRace: isGradeRace
@@ -93,6 +102,9 @@ document.addEventListener('DOMContentLoaded', () => {
             currentHorses = JSON.parse(JSON.stringify(item.horses));
             isGradeRace = item.isGradeRace || false;
             
+            savedGradeInfo = item.gradeInfo || "";
+            savedDateInfo = item.dateInfo || "";
+            
             updateOddsBtn.disabled = false;
             updateOddsBtn.classList.remove('cursor-not-allowed', 'bg-gray-600');
             updateOddsBtn.classList.add('bg-blue-600', 'hover:bg-blue-500');
@@ -135,6 +147,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
             document.getElementById('raceTitle').textContent = data.race_name || "出馬表";
             document.getElementById('raceCourse').textContent = data.course_info || "";
+            
+            savedGradeInfo = data.grade_info || "";
+            savedDateInfo = data.date_info || "";
             
             currentHorses = data.horses.sort((a,b) => a.umaban - b.umaban);
             isGradeRace = data.race_name ? data.race_name.includes('G1') || data.race_name.includes('G2') || data.race_name.includes('G3') : false;
@@ -352,4 +367,104 @@ document.addEventListener('DOMContentLoaded', () => {
         ];
         renderTable();
     };
+    // Merge Result Data
+    mergeResultBtn.addEventListener('click', async () => {
+        const resUrl = resultUrlInput.value.trim();
+        if (!resUrl) return;
+
+        mergeResultBtn.disabled = true;
+        mergeResultBtn.textContent = "取得中...";
+        resultStatusText.textContent = "";
+
+        try {
+            const res = await fetch(`/api/index?url=${encodeURIComponent(resUrl)}`);
+            if (!res.ok) throw new Error("結果の取得に失敗");
+            const data = await res.json();
+            
+            if (data.error) throw new Error(data.error);
+
+            if (data.date_info) savedDateInfo = data.date_info;
+            if (data.grade_info) savedGradeInfo = data.grade_info;
+
+            let mergedCount = 0;
+            data.horses.forEach(resHorse => {
+                const target = currentHorses.find(h => h.umaban === resHorse.umaban);
+                if (target && resHorse.placing) {
+                    target.placing = resHorse.placing;
+                    mergedCount++;
+                }
+            });
+
+            lastResultData = data;
+            resultStatusText.textContent = `✅ ${mergedCount}頭の着順情報を取り込みました！`;
+            setTimeout(()=> { resultStatusText.textContent = ""; }, 5000);
+            
+            saveToHistory();
+
+        } catch (err) {
+            resultStatusText.textContent = `❌ ${err.message}`;
+        } finally {
+            mergeResultBtn.disabled = false;
+            mergeResultBtn.textContent = "着順を合体する";
+        }
+    });
+
+    // CSV Download
+    exportCsvBtn.addEventListener('click', () => {
+        if (!lastFetchedUrl || currentHorses.length === 0) return;
+        
+        if (!currentHorses[0].cls) {
+             analyzeBtn.click();
+        }
+
+        const raceName = document.getElementById('raceTitle').textContent.replace(/,/g, '');
+        const courseInfo = document.getElementById('raceCourse').textContent.replace(/,/g, '');
+        const gradeStr = savedGradeInfo.replace(/,/g, '');
+        
+        let dateStr = savedDateInfo.replace(/,/g, '');
+        if (!dateStr) {
+            const m = lastFetchedUrl.match(/race_id=([0-9]{4})([0-9]{2})[0-9]{6}/);
+            if(m) dateStr = `${m[1]}-${m[2]}-xx`;
+            else dateStr = new Date().toISOString().split('T')[0];
+        } else {
+             const yMatch = lastFetchedUrl.match(/race_id=([0-9]{4})/);
+             const year = yMatch ? yMatch[1] : new Date().getFullYear();
+             const mdMatch = dateStr.match(/([0-9]+)月([0-9]+)日/);
+             if (mdMatch) {
+                 const mm = mdMatch[1].padStart(2, '0');
+                 const dd = mdMatch[2].padStart(2, '0');
+                 dateStr = `${year}-${mm}-${dd}`;
+             }
+        }
+
+        let csvContent = '\uFEFF';
+
+        // Excelの順番に合わせて並べて出力
+        currentHorses.sort((a,b) => a.umaban - b.umaban).forEach(h => {
+             const row = [
+                 dateStr,
+                 raceName,
+                 courseInfo,
+                 gradeStr,
+                 h.umaban,
+                 h.name,
+                 h.odds.toFixed(1),
+                 h.rank,
+                 h.ev ? h.ev.toFixed(3) : "0.000",
+                 h.placing || "",
+                 h.cls || ""
+             ];
+             csvContent += row.join(',') + "\r\n";
+        });
+
+        const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement("a");
+        link.setAttribute("href", url);
+        link.setAttribute("download", `SS-Engine_${raceName}.csv`);
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+    });
+
 });

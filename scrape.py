@@ -48,6 +48,12 @@ class handler(BaseHTTPRequestHandler):
 
         course_info_elem = soup.select_one(".RaceData01")
         course_info = course_info_elem.text.strip().replace('\n', ' ') if course_info_elem else ""
+        
+        grade_elem = soup.select_one(".RaceData02")
+        grade_info = grade_elem.text.replace('\n', ' ').strip() if grade_elem else ""
+
+        date_elem = soup.select_one(".RaceList_DateBox .Active") or soup.select_one("#RaceList_DateList .Active")
+        date_info = date_elem.text.strip() if date_elem else ""
 
         horses = []
         rows = soup.select(".HorseList")
@@ -55,7 +61,11 @@ class handler(BaseHTTPRequestHandler):
 
         for i, row in enumerate(rows):
             try:
+                placing = ""
                 if is_result_page:
+                    rank_elem = row.select_one("td.Result_Num") or row.select_one("td[class*='Result_Num']") or row.select_one("td.Rank")
+                    placing = rank_elem.text.strip() if rank_elem else ""
+
                     umaban_elem = row.select_one("td.Num.Txt_C") or row.select_one("td[class*='Num']")
                     if not umaban_elem: continue
                     try:
@@ -91,7 +101,8 @@ class handler(BaseHTTPRequestHandler):
                     "umaban": umaban,
                     "name": horse_name,
                     "odds": odds,
-                    "rank": "B"
+                    "rank": "B",
+                    "placing": placing
                 })
             except Exception as e:
                 pass
@@ -99,5 +110,7 @@ class handler(BaseHTTPRequestHandler):
         return {
             "race_name": race_name,
             "course_info": course_info,
+            "grade_info": grade_info,
+            "date_info": date_info,
             "horses": horses
         }

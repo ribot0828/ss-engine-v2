@@ -155,6 +155,25 @@
                     </tbody>
                 </table>
             </div>
+
+            <!-- Result Merging & CSV Export -->
+            <div class="glass-panel rounded-xl p-6 overflow-x-auto shadow-lg mt-8">
+                <h3 class="text-xl font-semibold text-green-300 mb-4 border-b border-slate-700 pb-2 flex items-center">
+                    <svg class="w-6 h-6 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path></svg>
+                    フェーズ5: レース結果紐付け＆CSV履歴保管
+                </h3>
+                <p class="text-sm text-slate-400 mb-4">結果ページのURLから着順を自動取得して合体させ、Excel用CSVファイルとして出力します。</p>
+                <div class="flex flex-col md:flex-row gap-4 mb-2">
+                    <input type="text" id="resultUrlInput" placeholder="結果ページのURLを入力 (例: netkeibaのresult.html...)" class="flex-1 bg-slate-800 border border-slate-600 rounded-lg px-4 py-2 text-white focus:outline-none focus:border-green-500 transition-colors">
+                    <button id="mergeResultBtn" class="bg-green-600 hover:bg-green-500 text-white font-semibold py-2 px-6 rounded-lg transition-colors whitespace-nowrap">
+                        着順を合体する
+                    </button>
+                    <button id="exportCsvBtn" class="bg-blue-600 hover:bg-blue-500 text-white font-semibold py-2 px-6 rounded-lg shadow-lg border border-blue-400 transition-colors whitespace-nowrap">
+                        CSVをダウンロード
+                    </button>
+                </div>
+                <div id="resultStatusText" class="text-sm text-green-400 font-semibold h-4"></div>
+            </div>
         </section>
         
         <footer class="text-center text-slate-600 text-sm mt-8 pb-4">
