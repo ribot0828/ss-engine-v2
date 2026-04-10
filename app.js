@@ -10,6 +10,8 @@ document.addEventListener('DOMContentLoaded', () => {
     const errorBox = document.getElementById('errorBox');
     const raceTableBody = document.querySelector('#raceTable tbody');
     const resultsPanel = document.getElementById('resultsPanel');
+    const historySelect = document.getElementById('historySelect');
+    const deleteHistoryBtn = document.getElementById('deleteHistoryBtn');
 
     let currentHorses = [];
     let isGradeRace = false; 
@@ -24,6 +26,94 @@ document.addEventListener('DOMContentLoaded', () => {
             errorBox.style.display = 'block';
         }
     };
+
+    let raceHistory = [];
+    const MAX_HISTORY = 20;
+
+    const loadHistoryFromStorage = () => {
+        try {
+            const saved = localStorage.getItem('ss_engine_history');
+            if (saved) {
+                raceHistory = JSON.parse(saved);
+            }
+        } catch(e) {}
+        renderHistoryDropdown();
+    };
+
+    const saveToHistory = () => {
+        if (!lastFetchedUrl || currentHorses.length === 0) return;
+        const existingIdx = raceHistory.findIndex(h => h.url === lastFetchedUrl);
+        const historyItem = {
+            url: lastFetchedUrl,
+            raceName: document.getElementById('raceTitle').textContent,
+            courseInfo: document.getElementById('raceCourse').textContent,
+            horses: JSON.parse(JSON.stringify(currentHorses)),
+            timestamp: new Date().getTime(),
+            isGradeRace: isGradeRace
+        };
+        if (existingIdx >= 0) {
+            raceHistory[existingIdx] = historyItem;
+        } else {
+            raceHistory.unshift(historyItem);
+            if (raceHistory.length > MAX_HISTORY) raceHistory.pop();
+        }
+        localStorage.setItem('ss_engine_history', JSON.stringify(raceHistory));
+        renderHistoryDropdown(lastFetchedUrl);
+    };
+
+    const renderHistoryDropdown = (selectedUrl = "") => {
+        if (raceHistory.length === 0) {
+            historySelect.innerHTML = '<option value="">-- 過去の履歴がありません --</option>';
+            deleteHistoryBtn.disabled = true;
+            return;
+        }
+        historySelect.innerHTML = '<option value="">-- 新規取得 (現在の出馬表) --</option>';
+        raceHistory.forEach(h => {
+            const dateStr = new Date(h.timestamp).toLocaleString('ja-JP', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+            const title = h.raceName ? (h.raceName.length > 15 ? h.raceName.substring(0,15)+"..." : h.raceName) : "不明なレース";
+            const opt = document.createElement('option');
+            opt.value = h.url;
+            opt.textContent = `${title} (${dateStr})`;
+            historySelect.appendChild(opt);
+        });
+        if (selectedUrl) historySelect.value = selectedUrl;
+        deleteHistoryBtn.disabled = !historySelect.value;
+    };
+
+    historySelect.addEventListener('change', (e) => {
+        const url = e.target.value;
+        deleteHistoryBtn.disabled = !url;
+        if (!url) return;
+        const item = raceHistory.find(h => h.url === url);
+        if (item) {
+            lastFetchedUrl = item.url;
+            urlInput.value = item.url;
+            document.getElementById('raceTitle').textContent = item.raceName;
+            document.getElementById('raceCourse').textContent = item.courseInfo;
+            currentHorses = JSON.parse(JSON.stringify(item.horses));
+            isGradeRace = item.isGradeRace || false;
+            
+            updateOddsBtn.disabled = false;
+            updateOddsBtn.classList.remove('cursor-not-allowed', 'bg-gray-600');
+            updateOddsBtn.classList.add('bg-blue-600', 'hover:bg-blue-500');
+            autoUpdateCheck.disabled = false;
+            
+            renderTable();
+            resultsPanel.style.display = 'none';
+        }
+    });
+
+    deleteHistoryBtn.addEventListener('click', () => {
+        const url = historySelect.value;
+        if (!url) return;
+        if (confirm("現在選択されている履歴を削除しますか？")) {
+            raceHistory = raceHistory.filter(h => h.url !== url);
+            localStorage.setItem('ss_engine_history', JSON.stringify(raceHistory));
+            renderHistoryDropdown();
+        }
+    });
+
+    loadHistoryFromStorage();
 
     fetchBtn.addEventListener('click', async () => {
         const url = urlInput.value.trim();
@@ -164,6 +254,7 @@ document.addEventListener('DOMContentLoaded', () => {
     analyzeBtn.addEventListener('click', () => {
         if (currentHorses.length === 0) return;
         
+        saveToHistory();
         const result = analyzeRace(currentHorses, isGradeRace);
         renderResults(result);
     });

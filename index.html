@@ -28,6 +28,17 @@
                 <svg class="w-6 h-6 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1"></path></svg>
                 フェーズ1・2: 出馬表の取得と個別評価
             </h2>
+            
+            <!-- History Section -->
+            <div class="mb-5 bg-slate-800/80 p-3 rounded-lg border border-slate-600 flex flex-col md:flex-row gap-2 items-center">
+                <span class="text-slate-300 text-sm font-semibold shrink-0">保存済みデータ:</span>
+                <select id="historySelect" class="flex-1 bg-slate-900 border border-slate-600 rounded px-3 py-2 text-white text-sm focus:outline-none focus:border-blue-500">
+                    <option value="">-- 過去の履歴がありません --</option>
+                </select>
+                <button id="deleteHistoryBtn" disabled class="shrink-0 bg-red-600/80 hover:bg-red-500 text-white text-sm py-2 px-4 rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer flex items-center">
+                    <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg> 削除
+                </button>
+            </div>
             <div class="flex flex-col md:flex-row gap-4 mb-4">
                 <input type="text" id="urlInput" placeholder="netkeibaの出馬表URLを入力" class="flex-1 bg-slate-800 border border-slate-600 rounded-lg px-4 py-2 text-white focus:outline-none focus:border-purple-500 transition-colors">
                 <button id="fetchBtn" class="btn-primary text-white font-semibold py-2 px-6 rounded-lg">
