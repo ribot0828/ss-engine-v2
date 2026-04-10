@@ -456,6 +456,10 @@ document.addEventListener('DOMContentLoaded', () => {
 
         let csvContent = '\uFEFF';
 
+        let tanshoPay = (lastResultData && lastResultData.payouts && lastResultData.payouts['単勝']) ? lastResultData.payouts['単勝'].replace(/,/g, '') : "";
+        let widePay = (lastResultData && lastResultData.payouts && lastResultData.payouts['ワイド']) ? lastResultData.payouts['ワイド'].replace(/円/g, "円 ").replace(/,/g, '').trim() : "";
+        let sanrenPay = (lastResultData && lastResultData.payouts && lastResultData.payouts['3連複']) ? lastResultData.payouts['3連複'].replace(/,/g, '') : "";
+
         currentHorses.sort((a,b) => a.umaban - b.umaban).forEach(h => {
              const row = [
                  dateStr,
@@ -475,17 +479,13 @@ document.addEventListener('DOMContentLoaded', () => {
                  h.finalCls || "",
                  h.placing || "",
                  h.mao !== undefined ? (h.mao === 999 ? "-" : h.mao.toFixed(1)) : "",
-                 h.amberPassed ? "○" : "×"
+                 h.amberPassed ? "○" : "×",
+                 tanshoPay,
+                 widePay,
+                 sanrenPay
              ];
              csvContent += row.join(',') + "\r\n";
         });
-
-        if (lastResultData && lastResultData.payouts) {
-             csvContent += `\r\n払戻金情報\r\n`;
-             if (lastResultData.payouts['単勝']) csvContent += `単勝,${lastResultData.payouts['単勝']}\r\n`;
-             if (lastResultData.payouts['ワイド']) csvContent += `ワイド,${lastResultData.payouts['ワイド']}\r\n`;
-             if (lastResultData.payouts['3連複']) csvContent += `3連複,${lastResultData.payouts['3連複']}\r\n`;
-        }
 
         const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
         const url = URL.createObjectURL(blob);
