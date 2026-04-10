@@ -389,10 +389,27 @@ document.addEventListener('DOMContentLoaded', () => {
             let mergedCount = 0;
             data.horses.forEach(resHorse => {
                 const target = currentHorses.find(h => h.umaban === resHorse.umaban);
-                if (target && resHorse.placing) {
-                    target.placing = resHorse.placing;
-                    mergedCount++;
+                if (target) {
+                    if (resHorse.placing) {
+                        target.placing = resHorse.placing;
+                        mergedCount++;
+                    }
+                    if (resHorse.odds !== undefined) target.finalOdds = resHorse.odds;
+                    if (resHorse.popular !== undefined) target.finalPopular = resHorse.popular;
                 }
+            });
+
+            let tempHorses = JSON.parse(JSON.stringify(currentHorses));
+            tempHorses.forEach(h => {
+                 if (h.finalOdds !== undefined) h.odds = h.finalOdds;
+            });
+            const tempRes = analyzeRace(tempHorses, isGradeRace);
+            currentHorses.forEach(h => {
+                 const fh = tempRes.horses.find(x => x.umaban === h.umaban);
+                 if (fh) {
+                     h.finalEv = fh.ev;
+                     h.finalCls = fh.cls;
+                 }
             });
 
             lastResultData = data;
@@ -439,7 +456,6 @@ document.addEventListener('DOMContentLoaded', () => {
 
         let csvContent = '\uFEFF';
 
-        // Excelの順番に合わせて並べて出力
         currentHorses.sort((a,b) => a.umaban - b.umaban).forEach(h => {
              const row = [
                  dateStr,
@@ -448,20 +464,34 @@ document.addEventListener('DOMContentLoaded', () => {
                  gradeStr,
                  h.umaban,
                  h.name,
+                 h.popular || "",
                  h.odds.toFixed(1),
                  h.rank,
                  h.ev ? h.ev.toFixed(3) : "0.000",
+                 h.cls || "",
+                 h.finalPopular || "",
+                 h.finalOdds !== undefined ? h.finalOdds.toFixed(1) : "",
+                 h.finalEv !== undefined ? h.finalEv.toFixed(3) : "",
+                 h.finalCls || "",
                  h.placing || "",
-                 h.cls || ""
+                 h.mao !== undefined ? (h.mao === 999 ? "-" : h.mao.toFixed(1)) : "",
+                 h.amberPassed ? "○" : "×"
              ];
              csvContent += row.join(',') + "\r\n";
         });
+
+        if (lastResultData && lastResultData.payouts) {
+             csvContent += `\r\n払戻金情報\r\n`;
+             if (lastResultData.payouts['単勝']) csvContent += `単勝,${lastResultData.payouts['単勝']}\r\n`;
+             if (lastResultData.payouts['ワイド']) csvContent += `ワイド,${lastResultData.payouts['ワイド']}\r\n`;
+             if (lastResultData.payouts['3連複']) csvContent += `3連複,${lastResultData.payouts['3連複']}\r\n`;
+        }
 
         const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
         const url = URL.createObjectURL(blob);
         const link = document.createElement("a");
         link.setAttribute("href", url);
-        link.setAttribute("download", `SS-Engine_${raceName}.csv`);
+        link.setAttribute("download", `SS-Engine_${raceName}-${dateStr}.csv`);
         document.body.appendChild(link);
         link.click();
         document.body.removeChild(link);

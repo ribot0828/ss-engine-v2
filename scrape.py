@@ -47,10 +47,32 @@ class handler(BaseHTTPRequestHandler):
         race_name = race_name_elem.text.strip() if race_name_elem else "不明なレース"
 
         course_info_elem = soup.select_one(".RaceData01")
-        course_info = course_info_elem.text.strip().replace('\n', ' ') if course_info_elem else ""
+        if course_info_elem:
+            course_text = course_info_elem.text.strip().replace('\n', ' ')
+            course_info = re.sub(r'^[0-9]+:[0-9]+\s*発走\s*/\s*', '', course_text)
+        else:
+            course_info = ""
         
         grade_elem = soup.select_one(".RaceData02")
-        grade_info = grade_elem.text.replace('\n', ' ').strip() if grade_elem else ""
+        raw_grade = grade_elem.text.replace('\n', ' ').strip() if grade_elem else ""
+        
+        grade_info = "不明"
+        if raw_grade:
+            match_grade = re.search(r'(オープン|3勝クラス|2勝クラス|1勝クラス|新馬|未勝利|OP|G1|G2|G3|GⅠ|GⅡ|GⅢ|Jpn1|Jpn2|Jpn3)', raw_grade)
+            if match_grade:
+                grade_info = match_grade.group(1)
+            
+            grade_icon = soup.select_one('.Icon_GradeType') or soup.find(class_=lambda x: x and 'Icon_GradeType' in x)
+            if grade_icon:
+                classes = grade_icon.get('class', [])
+                if 'Icon_GradeType1' in classes: grade_info = 'G1'
+                elif 'Icon_GradeType2' in classes: grade_info = 'G2'
+                elif 'Icon_GradeType3' in classes: grade_info = 'G3'
+                elif grade_icon.text.strip(): grade_info = grade_icon.text.strip()
+            
+            match_head = re.search(r'([0-9]+頭)', raw_grade)
+            if match_head:
+                grade_info += f" {match_head.group(1)}"
 
         date_elem = soup.select_one(".RaceList_DateBox .Active") or soup.select_one("#RaceList_DateList .Active")
         date_info = date_elem.text.strip() if date_elem else ""
@@ -63,6 +85,7 @@ class handler(BaseHTTPRequestHandler):
         for i, row in enumerate(rows):
             try:
                 placing = ""
+                popular = ""
                 if is_result_page:
                     rank_elem = row.select_one("td.Result_Num") or row.select_one("td[class*='Result_Num']") or row.select_one("td.Rank")
                     placing = rank_elem.text.strip() if rank_elem else ""
@@ -77,8 +100,13 @@ class handler(BaseHTTPRequestHandler):
                     horse_name_elem = row.select_one(".Horse_Info")
                     horse_name = horse_name_elem.text.strip() if horse_name_elem else "不明"
 
-                    odds_elem = row.select_one("td.Odds.Txt_R") or row.select_one("td.Odds")
-                    odds_text = odds_elem.text.strip() if odds_elem else "0.0"
+                    odds_tds = row.select("td[class*='Odds']")
+                    if len(odds_tds) >= 2:
+                        popular = odds_tds[0].text.strip()
+                        odds_text = odds_tds[1].text.strip()
+                    else:
+                        odds_elem = row.select_one("td.Odds.Txt_R") or row.select_one("td.Odds")
+                        odds_text = odds_elem.text.strip() if odds_elem else "0.0"
                 else:
                     umaban_elem = row.select_one("td[class^='Umaban']") or row.select_one("td.Umaban")
                     if not umaban_elem: continue
@@ -89,6 +117,9 @@ class handler(BaseHTTPRequestHandler):
 
                     horse_name_elem = row.select_one(".HorseName a") or row.select_one(".HorseName") or row.select_one(".HorseInfo")
                     horse_name = horse_name_elem.text.strip() if horse_name_elem else "不明"
+
+                    opts = row.select("td.Popular") or row.select("td.Txt_C.Popular")
+                    popular = opts[0].text.strip() if opts else ""
 
                     odds_elem = row.select_one("td.Txt_R span") or row.select_one("td.Popular span") or row.select_one("td.Odds span") or row.select_one("td.Txt_R.Popular") or row.select_one("td.Popular") or row.select_one("td.Txt_R")
                     odds_text = odds_elem.text.strip() if odds_elem else "0.0"
@@ -106,16 +137,29 @@ class handler(BaseHTTPRequestHandler):
                     "umaban": umaban,
                     "name": horse_name,
                     "odds": odds,
+                    "popular": popular,
                     "rank": "B",
                     "placing": placing
                 })
             except Exception as e:
                 pass
 
+        payouts = {}
+        for tbl in soup.select('.Payout_Detail_Table'):
+            for tr in tbl.select('tr'):
+                th = tr.select_one('th')
+                if not th: continue
+                type_name = th.text.strip()
+                if type_name in ['単勝', 'ワイド', '3連複']:
+                    tds = tr.select('td')
+                    if len(tds) >= 2:
+                        payouts[type_name] = tds[1].text.strip().replace('\n', ' ')
+
         return {
             "race_name": race_name,
             "course_info": course_info,
             "grade_info": grade_info,
             "date_info": date_info,
-            "horses": horses
+            "horses": horses,
+            "payouts": payouts
         }
