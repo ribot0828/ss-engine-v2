@@ -392,8 +392,19 @@ document.addEventListener('DOMContentLoaded', () => {
             const data = await res.json();
             if (data.error) throw new Error(data.error);
 
+            // 取得できた場合のみコース詳細などを更新 (ガード付き)
+            if (data.course_info) {
+                const courseLabel = document.getElementById('raceCourse');
+                if (courseLabel.textContent === "" || courseLabel.textContent.includes("不明")) {
+                    courseLabel.textContent = data.course_info;
+                }
+            }
             if (data.date_info) savedDateInfo = data.date_info;
-            if (data.grade_info) savedGradeInfo = data.grade_info;
+            if (data.grade_info) {
+                if (savedGradeInfo === "" || savedGradeInfo === "不明") {
+                    savedGradeInfo = data.grade_info;
+                }
+            }
 
             // 1. 各馬の結果情報を紐付け
             let mergedCount = 0;
