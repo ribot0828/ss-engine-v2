@@ -144,172 +144,217 @@ class handler(BaseHTTPRequestHandler):
             return f"エラー: {str(e)[:10]}"
 
     def scrape_netkeiba(self, url):
-        # URLの正規化
+        # URLの正規化とタイプ判別
         match = re.search(r'race_id=(\d+)', url)
         race_id = None
         if match:
             race_id = match.group(1)
-            page_type = 'result' if 'result' in url else 'shutuba'
-            url = f"https://race.netkeiba.com/race/{page_type}.html?race_id={race_id}"
+        
+        is_result_page = 'result.html' in url
+        is_odds_view = 'pid=odds_view' in url
 
-        headers = {
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
-        }
+        # ヘッダーの設定（モバイル版URLの場合はiPhoneを模倣）
+        if 'sp.netkeiba.com' in url or is_odds_view:
+            headers = {"User-Agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 16_0 like Mac OS X) AppleWebKit/605.1.15"}
+        else:
+            headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}
+
         res = requests.get(url, headers=headers)
         res.encoding = 'euc-jp' 
         soup = BeautifulSoup(res.text, 'html.parser')
 
-        race_name_elem = soup.select_one(".RaceName")
-        race_name = race_name_elem.text.strip() if race_name_elem else "不明なレース"
+        # 1. メタデータの抽出
+        if is_odds_view:
+            # オッズ画面専用のメタ抽出
+            race_name_elem = soup.select_one("h1.RaceName") or soup.select_one(".RaceName")
+            race_name = race_name_elem.text.strip() if race_name_elem else "不明なレース"
 
-        # レース番号の抽出
-        race_num_elem = soup.select_one(".RaceNum") or soup.select_one(".Race_Num")
-        race_num = race_num_elem.text.strip() if race_num_elem else ""
+            race_num_elem = soup.select_one(".RaceNum") or soup.select_one(".Race_Num")
+            race_num = race_num_elem.text.strip() if race_num_elem else ""
 
-        # 開催場の抽出
-        venue = ""
-        venue_elem = soup.select_one(".RaceList_DateList .Active") or soup.select_one(".Race_Date")
-        if venue_elem:
-            venue = venue_elem.get_text().strip()
-            # 「4/11(土) 阪神」のような形式から「阪神」を抽出
-            v_match = re.search(r'([^\d\(\)\s/]+)$', venue)
-            if v_match: venue = v_match.group(1)
-        
+            venue = ""
+            venue_elem = soup.select_one(".Race_Date a") or soup.select_one(".Race_Date")
+            if venue_elem:
+                venue_text = venue_elem.get_text().strip()
+                v_match = re.search(r'([^\d\(\)\s/]+)$', venue_text)
+                if v_match: venue = v_match.group(1)
+            
+            course_info_elem = soup.select_one(".RaceData01")
+            if course_info_elem:
+                course_info = course_info_elem.text.strip().replace('\n', ' ')
+            else:
+                course_info = ""
+            
+            grade_info = "不明"
+            grade_match = re.search(r'(オープン|3勝クラス|2勝クラス|1勝クラス|新馬|未勝利|OP|G1|G2|G3|GⅠ|GⅡ|GⅢ)', race_name + course_info)
+            if grade_match:
+                grade_info = grade_match.group(1)
+            
+            date_info = "" # オッズ画面からは日付取得が難しいため空（historyで補完）
+        else:
+            # 通常（出馬表/結果）のメタ抽出
+            race_name_elem = soup.select_one(".RaceName")
+            race_name = race_name_elem.text.strip() if race_name_elem else "不明なレース"
+
+            race_num_elem = soup.select_one(".RaceNum") or soup.select_one(".Race_Num")
+            race_num = race_num_elem.text.strip() if race_num_elem else ""
+
+            venue = ""
+            venue_elem = soup.select_one(".RaceList_DateList .Active") or soup.select_one(".Race_Date")
+            if venue_elem:
+                venue = venue_elem.get_text().strip()
+                v_match = re.search(r'([^\d\(\)\s/]+)$', venue)
+                if v_match: venue = v_match.group(1)
+            
+            course_info_elem = soup.select_one(".RaceData01")
+            if course_info_elem:
+                course_text = course_info_elem.text.strip().replace('\n', ' ')
+                course_info = re.sub(r'^[0-9]+:[0-9]+\s*発走\s*/\s*', '', course_text)
+            else:
+                course_info = ""
+            
+            grade_elem = soup.select_one(".RaceData02")
+            raw_grade = grade_elem.text.replace('\n', ' ').strip() if grade_elem else ""
+            grade_info = "不明"
+            if raw_grade:
+                match_grade = re.search(r'(オープン|3勝クラス|2勝クラス|1勝クラス|新馬|未勝利|OP|G1|G2|G3|GⅠ|GⅡ|GⅢ|Jpn1|Jpn2|Jpn3)', raw_grade)
+                if match_grade: grade_info = match_grade.group(1)
+                
+                grade_icon = soup.select_one('.Icon_GradeType') or soup.find(class_=lambda x: x and 'Icon_GradeType' in x)
+                if grade_icon:
+                    classes = grade_icon.get('class', [])
+                    if 'Icon_GradeType1' in classes: grade_info = 'G1'
+                    elif 'Icon_GradeType2' in classes: grade_info = 'G2'
+                    elif 'Icon_GradeType3' in classes: grade_info = 'G3'
+                
+                match_head = re.search(r'([0-9]+頭)', raw_grade)
+                if match_head: grade_info += f" {match_head.group(1)}"
+
+            date_elem = soup.select_one(".RaceList_DateBox .Active") or soup.select_one("#RaceList_DateList .Active")
+            date_info = date_elem.text.strip() if date_elem else ""
+
         if not venue and race_id:
-            # race_idから会場コードで判別 (JRA)
             venue_code = race_id[4:6]
             jra_venues = {"01":"札幌","02":"函館","03":"福島","04":"新潟","05":"東京","06":"中山","07":"中京","08":"京都","09":"阪神","10":"小倉"}
             venue = jra_venues.get(venue_code, "")
 
-        course_info_elem = soup.select_one(".RaceData01")
-        if course_info_elem:
-            course_text = course_info_elem.text.strip().replace('\n', ' ')
-            course_info = re.sub(r'^[0-9]+:[0-9]+\s*発走\s*/\s*', '', course_text)
-        else:
-            course_info = ""
-        
-        grade_elem = soup.select_one(".RaceData02")
-        raw_grade = grade_elem.text.replace('\n', ' ').strip() if grade_elem else ""
-        
-        grade_info = "不明"
-        if raw_grade:
-            match_grade = re.search(r'(オープン|3勝クラス|2勝クラス|1勝クラス|新馬|未勝利|OP|G1|G2|G3|GⅠ|GⅡ|GⅢ|Jpn1|Jpn2|Jpn3)', raw_grade)
-            if match_grade:
-                grade_info = match_grade.group(1)
-            
-            grade_icon = soup.select_one('.Icon_GradeType') or soup.find(class_=lambda x: x and 'Icon_GradeType' in x)
-            if grade_icon:
-                classes = grade_icon.get('class', [])
-                if 'Icon_GradeType1' in classes: grade_info = 'G1'
-                elif 'Icon_GradeType2' in classes: grade_info = 'G2'
-                elif 'Icon_GradeType3' in classes: grade_info = 'G3'
-            
-            match_head = re.search(r'([0-9]+頭)', raw_grade)
-            if match_head:
-                grade_info += f" {match_head.group(1)}"
-
-        date_elem = soup.select_one(".RaceList_DateBox .Active") or soup.select_one("#RaceList_DateList .Active")
-        date_info = date_elem.text.strip() if date_elem else ""
-
+        # 2. 馬リストの抽出
         horses = []
         seen_umaban = set()
-        rows = soup.select(".HorseList")
-        is_result_page = 'result.html' in url
 
-        for i, row in enumerate(rows):
-            try:
-                # 馬の行であることを確認（リンクがない、またはパドック情報などはスキップ）
-                horse_link = row.select_one("a[href*='/horse/']")
-                if not horse_link and not is_result_page:
-                    continue
+        if is_odds_view:
+            # オッズ画面構造
+            rows = soup.select(".RaceHorseList li")
+            for i, row in enumerate(rows):
+                try:
+                    num_elem = row.select_one(".Horse_Num")
+                    name_elem = row.select_one(".Horse_Name") or row.select_one("dt")
+                    odds_elem = row.select_one(".Odds_Win")
+                    pop_elem = row.select_one(".Popular")
+                    
+                    if not name_elem: continue
+                    name = name_elem.text.strip()
+                    if "データがありません" in name: continue
 
-                placing = ""
-                popular = ""
-                horse_id = "不明"
-                if horse_link:
-                    id_match = re.search(r'/horse/(\d+)', horse_link['href'])
-                    if id_match: horse_id = id_match.group(1)
-
-                if is_result_page:
-                    rank_elem = row.select_one("td.Result_Num") or row.select_one("td[class*='Result_Num']") or row.select_one("td.Rank")
-                    placing = rank_elem.text.strip() if rank_elem else ""
-
-                    umaban_elem = row.select_one("td.Num.Txt_C") or row.select_one("td[class*='Num']")
-                    if not umaban_elem: continue
                     try:
-                        umaban = int(umaban_elem.text.strip())
-                    except ValueError:
-                        continue # 馬番が数字でない場合はスキップ
+                        umaban = int(num_elem.text.strip()) if num_elem else i + 1
+                    except:
+                        umaban = i + 1
+                    
+                    odds_txt = odds_elem.text.strip().replace('---.-', '0.0') if odds_elem else "0.0"
+                    popular = pop_elem.text.strip() if pop_elem else ""
 
-                    horse_name_elem = row.select_one(".Horse_Info")
-                    horse_name = horse_name_elem.text.strip() if horse_name_elem else "不明"
+                    horse_id = "不明"
+                    horse_link = name_elem.select_one("a") or row.select_one("a[href*='/horse/']")
+                    if horse_link:
+                        id_match = re.search(r'/horse/(\d+)', horse_link['href'])
+                        if id_match: horse_id = id_match.group(1)
 
-                    odds_tds = row.select("td[class*='Odds']")
-                    if len(odds_tds) >= 2:
-                        popular = odds_tds[0].text.strip()
-                        odds_text = odds_tds[1].text.strip()
-                    else:
-                        odds_elem = row.select_one("td.Odds.Txt_R") or row.select_one("td.Odds")
-                        odds_text = odds_elem.text.strip() if odds_elem else "0.0"
-                else:
-                    umaban_elem = row.select_one("td[class^='Umaban']") or row.select_one("td.Umaban")
-                    if umaban_elem:
+                    if umaban in seen_umaban: continue
+                    seen_umaban.add(umaban)
+
+                    horses.append({
+                        "umaban": umaban, "name": name, "horse_id": horse_id,
+                        "odds": float(odds_txt or 0), "popular": popular,
+                        "rank": "B", "placing": "", "audit": "-"
+                    })
+                except: pass
+        else:
+            # 通常（出馬表/結果）構造
+            rows = soup.select(".HorseList")
+            for i, row in enumerate(rows):
+                try:
+                    horse_link = row.select_one("a[href*='/horse/']")
+                    if not horse_link and not is_result_page: continue
+
+                    placing = ""
+                    popular = ""
+                    horse_id = "不明"
+                    if horse_link:
+                        id_match = re.search(r'/horse/(\d+)', horse_link['href'])
+                        if id_match: horse_id = id_match.group(1)
+
+                    if is_result_page:
+                        rank_elem = row.select_one("td.Result_Num") or row.select_one("td[class*='Result_Num']") or row.select_one("td.Rank")
+                        placing = rank_elem.text.strip() if rank_elem else ""
+
+                        umaban_elem = row.select_one("td.Num.Txt_C") or row.select_one("td[class*='Num']")
+                        if not umaban_elem: continue
                         try:
                             umaban = int(umaban_elem.text.strip())
-                        except ValueError:
-                            continue
-                        horse_name_elem = row.select_one(".HorseName a") or row.select_one(".HorseName") or row.select_one(".HorseInfo")
+                        except ValueError: continue
+
+                        horse_name_elem = row.select_one(".Horse_Info")
                         horse_name = horse_name_elem.text.strip() if horse_name_elem else "不明"
-                    else:
-                        # SP版
-                        horse_info_elem = row.select_one("td.Horse_Info") or row.select_one("td.HorseName")
-                        if horse_info_elem:
-                            # 枠番から予測するのではなく、Horse_Info内のテキストから馬番を慎重に取得するか、スキップ判定
-                            # 実際にはSP版でも .Horse_Info があれば馬である可能性が高い
-                            for tag in horse_info_elem.find_all(['span', 'small', 'a']):
-                                tag.decompose()
-                            horse_name = horse_info_elem.text.strip().split('\n')[0].strip()
-                            if not horse_name or horse_name == "不明": continue
-                            
-                            # 馬番取得（SP版の隠れたテキストや構造から）
-                            umaban_txt = row.select_one(".Horse_Num") or row.select_one("td:nth-of-type(1)")
-                            try:
-                                umaban = int(umaban_txt.text.strip())
-                            except:
-                                umaban = i + 1
+
+                        odds_tds = row.select("td[class*='Odds']")
+                        if len(odds_tds) >= 2:
+                            popular = odds_tds[0].text.strip()
+                            odds_text = odds_tds[1].text.strip()
                         else:
-                            continue
+                            odds_elem = row.select_one("td.Odds.Txt_R") or row.select_one("td.Odds")
+                            odds_text = odds_elem.text.strip() if odds_elem else "0.0"
+                    else:
+                        umaban_elem = row.select_one("td[class^='Umaban']") or row.select_one("td.Umaban")
+                        if umaban_elem:
+                            try: umaban = int(umaban_elem.text.strip())
+                            except ValueError: continue
+                            horse_name_elem = row.select_one(".HorseName a") or row.select_one(".HorseName") or row.select_one(".HorseInfo")
+                            horse_name = horse_name_elem.text.strip() if horse_name_elem else "不明"
+                        else:
+                            horse_info_elem = row.select_one("td.Horse_Info") or row.select_one("td.HorseName")
+                            if horse_info_elem:
+                                for tag in horse_info_elem.find_all(['span', 'small', 'a']): tag.decompose()
+                                horse_name = horse_info_elem.text.strip().split('\n')[0].strip()
+                                if not horse_name or horse_name == "不明": continue
+                                umaban_txt = row.select_one(".Horse_Num") or row.select_one("td:nth-of-type(1)")
+                                try: umaban = int(umaban_txt.text.strip())
+                                except: umaban = i + 1
+                            else: continue
 
-                    opts = row.select("td.Popular") or row.select("td.Txt_C.Popular")
-                    popular = opts[0].text.strip() if opts else ""
+                        opts = row.select("td.Popular") or row.select("td.Txt_C.Popular")
+                        popular = opts[0].text.strip() if opts else ""
 
-                    odds_elem = row.select_one("td.Txt_R span") or row.select_one("td.Popular span") or row.select_one("td.Odds span") or row.select_one("td.Txt_R.Popular") or row.select_one("td.Popular") or row.select_one("td.Txt_R")
-                    odds_text = odds_elem.text.strip() if odds_elem else "0.0"
-                
-                try:
-                    odds = float(odds_text.replace('---.-', '0.0'))
-                except ValueError:
-                    odds = 0.0
+                        odds_elem = row.select_one("td.Txt_R span") or row.select_one("td.Popular span") or row.select_one("td.Odds span") or row.select_one("td.Txt_R.Popular") or row.select_one("td.Popular") or row.select_one("td.Txt_R")
+                        odds_text = odds_elem.text.strip() if odds_elem else "0.0"
+                    
+                    try:
+                        odds = float(odds_text.replace('---.-', '0.0'))
+                    except ValueError: odds = 0.0
 
-                if popular in ['**', '---.-', '-', '']: popular = ''
-                if umaban in seen_umaban: continue
-                seen_umaban.add(umaban)
+                    if popular in ['**', '---.-', '-', '']: popular = ''
+                    if umaban in seen_umaban: continue
+                    seen_umaban.add(umaban)
 
-                horses.append({
-                    "umaban": umaban,
-                    "name": horse_name,
-                    "horse_id": horse_id,
-                    "odds": odds,
-                    "popular": popular,
-                    "rank": "B",
-                    "placing": placing,
-                    "audit": "-" # 初期値
-                })
-            except Exception:
-                pass
+                    horses.append({
+                        "umaban": umaban, "name": horse_name, "horse_id": horse_id,
+                        "odds": odds, "popular": popular, "rank": "B",
+                        "placing": placing, "audit": "-"
+                    })
+                except Exception: pass
 
-        # オッズ補完
-        if not is_result_page and race_id:
+        # 3. オッズ補完（出馬表の場合のみ）
+        if not is_result_page and not is_odds_view and race_id:
             has_valid_odds = any(h["odds"] > 0 for h in horses)
             if not has_valid_odds:
                 odds_map = self.fetch_odds_api(race_id) or self.fetch_live_odds_sp(race_id)
@@ -319,8 +364,8 @@ class handler(BaseHTTPRequestHandler):
                         h["odds"] = api_data["odds"]
                         h["popular"] = api_data["popular"]
         
-        # X/D1 監査の実行 (データ取得後に全馬に対して行う)
-        clean_grade = grade_info.split(' ')[0] # '2勝クラス 12頭' -> '2勝クラス'
+        # 4. 監査の実行
+        clean_grade = grade_info.split(' ')[0]
         for h in horses:
             h["audit"] = self.audit_horse_history(h["horse_id"], clean_grade)
 
