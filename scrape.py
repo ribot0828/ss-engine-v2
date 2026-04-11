@@ -115,32 +115,37 @@ class handler(BaseHTTPRequestHandler):
         seen_umaban = set()
 
         if is_result:
-            # レース結果ページ
-            rows = soup.select(".ResultTable tr") or soup.select(".HorseList")
-            for i, row in enumerate(rows):
-                try:
-                    cols = row.select('td')
-                    if len(cols) >= 10: # PC
-                        placing = cols[0].text.strip()
-                        umaban = int(cols[2].text.strip())
-                        name_a = cols[3].select_one('a')
-                        name = name_a.get_text().strip()
-                        hid = re.search(r'/horse/(\d+)', name_a['href']).group(1)
-                        pop = cols[9].text.strip()
-                        odds = float(cols[10].text.strip().replace('---.-', '0.0'))
-                    else: # SP
-                        placing = (row.select_one(".Result_Num") or row.select_one(".Rank")).get_text().strip()
-                        umaban = int(re.sub(r'\D', '', (row.select_one(".Umaban") or row.select_one(".Num")).get_text().strip()))
+            # 結果ページ (PC版)
+            table = soup.select_one(".ResultTable") or soup.select_one("#All_Result_Table")
+            if table:
+                rows = table.select("tr")
+                for row in rows:
+                    cols = row.select("td")
+                    if len(cols) < 10: continue
+                    try:
+                        # クラス名指定で確実に取得
+                        placing_elem = row.select_one(".Rank") or cols[0]
+                        placing = placing_elem.get_text().strip()
+                        
+                        umaban_elem = row.select_one(".Num") or cols[2]
+                        umaban = int(re.sub(r'\D', '', umaban_elem.get_text().strip()))
+                        
                         name_a = row.select_one("a[href*='/horse/']")
-                        name = name_a.get_text().strip()
-                        hid = re.search(r'/horse/(\d+)', name_a['href']).group(1)
-                        pop = ""
-                        odds = 0.0
-                    
-                    if umaban in seen_umaban: continue
-                    seen_umaban.add(umaban)
-                    horses.append({"umaban": umaban, "name": name, "horse_id": hid, "odds": odds, "popular": pop, "rank": "B", "placing": placing, "audit": "-"})
-                except: pass
+                        name = name_a.get_text().strip() if name_a else "不明"
+                        hid = re.search(r'/horse/(\d+)', name_a['href']).group(1) if name_a else "不明"
+                        
+                        # 人気とオッズをクラス名から抽出
+                        pop_elem = row.select_one(".Popular") or row.select_one(".Txt_C") # 人気
+                        odds_elem = row.select_one(".Odds") or row.select_one(".Txt_R")    # オッズ
+                        
+                        pop = pop_elem.get_text().strip() if pop_elem else ""
+                        odds_txt = odds_elem.get_text().strip().replace(',', '').replace('---.-', '0.0') if odds_elem else "0.0"
+                        odds = float(odds_txt) if odds_txt else 0.0
+
+                        if umaban in seen_umaban: continue
+                        seen_umaban.add(umaban)
+                        horses.append({"umaban": umaban, "name": name, "horse_id": hid, "odds": odds, "popular": pop, "rank": "B", "placing": placing, "audit": "-"})
+                    except: pass
         else:
             # 出馬表ページ
             rows = soup.select(".HorseList")
