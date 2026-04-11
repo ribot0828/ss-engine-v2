@@ -134,15 +134,26 @@ class handler(BaseHTTPRequestHandler):
                         odds_elem = row.select_one("td.Odds.Txt_R") or row.select_one("td.Odds")
                         odds_text = odds_elem.text.strip() if odds_elem else "0.0"
                 else:
+                    # PC版: Umaban列がある（class^='Umaban'）
                     umaban_elem = row.select_one("td[class^='Umaban']") or row.select_one("td.Umaban")
-                    if not umaban_elem: continue
-                    try:
-                        umaban = int(umaban_elem.text.strip())
-                    except ValueError:
+                    if umaban_elem:
+                        try:
+                            umaban = int(umaban_elem.text.strip())
+                        except ValueError:
+                            umaban = i + 1
+                        horse_name_elem = row.select_one(".HorseName a") or row.select_one(".HorseName") or row.select_one(".HorseInfo")
+                        horse_name = horse_name_elem.text.strip() if horse_name_elem else "不明"
+                    else:
+                        # SP版: Umaban列がなく、Waku列(index 0) + Horse_Info列(index 2)構造
                         umaban = i + 1
-
-                    horse_name_elem = row.select_one(".HorseName a") or row.select_one(".HorseName") or row.select_one(".HorseInfo")
-                    horse_name = horse_name_elem.text.strip() if horse_name_elem else "不明"
+                        horse_info_elem = row.select_one("td.Horse_Info") or row.select_one("td.HorseName")
+                        if horse_info_elem:
+                            # 馬名のみ取り出す（余分なテキストを除去）
+                            for tag in horse_info_elem.find_all(['span', 'small', 'a']):
+                                tag.decompose()
+                            horse_name = horse_info_elem.text.strip().split('\n')[0].strip()
+                        else:
+                            horse_name = "不明"
 
                     opts = row.select("td.Popular") or row.select("td.Txt_C.Popular")
                     popular = opts[0].text.strip() if opts else ""
@@ -175,15 +186,20 @@ class handler(BaseHTTPRequestHandler):
                 pass
 
         # 出馬表ページでオッズがJS遅延ロードの場合、APIから補完
+        odds_unavailable = False
         if not is_result_page and race_id:
             has_valid_odds = any(h["odds"] > 0 for h in horses)
             if not has_valid_odds:
                 odds_map = self.fetch_odds_api(race_id)
-                for h in horses:
-                    api_data = odds_map.get(h["umaban"])
-                    if api_data:
-                        h["odds"] = api_data["odds"]
-                        h["popular"] = api_data["popular"]
+                if odds_map:
+                    for h in horses:
+                        api_data = odds_map.get(h["umaban"])
+                        if api_data:
+                            h["odds"] = api_data["odds"]
+                            h["popular"] = api_data["popular"]
+                else:
+                    # APIからも取得できない = オッズ未発売
+                    odds_unavailable = True
 
         payouts = {}
         for tbl in soup.select('.Payout_Detail_Table'):
@@ -202,5 +218,6 @@ class handler(BaseHTTPRequestHandler):
             "grade_info": grade_info,
             "date_info": date_info,
             "horses": horses,
-            "payouts": payouts
+            "payouts": payouts,
+            "odds_unavailable": odds_unavailable
         }
