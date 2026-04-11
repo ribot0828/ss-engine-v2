@@ -390,42 +390,43 @@ document.addEventListener('DOMContentLoaded', () => {
             const res = await fetch(`/api/index?url=${encodeURIComponent(resUrl)}`);
             if (!res.ok) throw new Error("結果の取得に失敗");
             const data = await res.json();
-            
             if (data.error) throw new Error(data.error);
 
             if (data.date_info) savedDateInfo = data.date_info;
             if (data.grade_info) savedGradeInfo = data.grade_info;
 
+            // 1. 各馬の結果情報を紐付け
             let mergedCount = 0;
             data.horses.forEach(resHorse => {
                 const target = currentHorses.find(h => h.umaban === resHorse.umaban);
                 if (target) {
-                    if (resHorse.placing) {
-                        target.placing = resHorse.placing;
-                        mergedCount++;
-                    }
-                    if (resHorse.odds !== undefined) target.finalOdds = resHorse.odds;
-                    if (resHorse.popular !== undefined) target.finalPopular = resHorse.popular;
+                    target.placing = resHorse.placing || "";
+                    target.finalOdds = parseFloat(resHorse.odds) || 0;
+                    target.finalPopular = resHorse.popular || "";
+                    mergedCount++;
                 }
             });
 
+            // 2. 確定オッズを基に「最終期待値」と「最終クラス」を再計算
             let tempHorses = JSON.parse(JSON.stringify(currentHorses));
             tempHorses.forEach(h => {
-                 if (h.finalOdds !== undefined) h.odds = h.finalOdds;
+                 // 確定オッズがある場合は、一時的に解析用の odds を書き換える
+                 if (h.finalOdds && h.finalOdds > 0) h.odds = h.finalOdds;
             });
             const tempRes = analyzeRace(tempHorses, isGradeRace);
+            
+            // 計算結果を元の currentHorses に反映
             currentHorses.forEach(h => {
                  const fh = tempRes.horses.find(x => x.umaban === h.umaban);
                  if (fh) {
-                     h.finalEv = fh.ev;
-                     h.finalCls = fh.cls;
+                     h.finalEv = fh.ev;     // 最終確定期待値
+                     h.finalCls = fh.cls;   // 最終確定クラス
                  }
             });
 
             lastResultData = data;
-            resultStatusText.textContent = `✅ ${mergedCount}頭の着順情報を取り込みました！`;
+            resultStatusText.textContent = `✅ ${mergedCount}頭の結果を合体し、最終解析を完了しました！`;
             setTimeout(()=> { resultStatusText.textContent = ""; }, 5000);
-            
             saveToHistory();
 
         } catch (err) {
@@ -449,7 +450,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const gradeStr = savedGradeInfo.replace(/,/g, '');
         
         let dateStr = savedDateInfo.replace(/,/g, '');
-        if (!dateStr) {
+        if (!dateStr || dateStr === "2026-04-11") {
             const m = lastFetchedUrl.match(/race_id=([0-9]{4})([0-9]{2})[0-9]{6}/);
             if(m) dateStr = `${m[1]}-${m[2]}-xx`;
             else dateStr = new Date().toISOString().split('T')[0];
@@ -464,37 +465,37 @@ document.addEventListener('DOMContentLoaded', () => {
              }
         }
 
+        // 完成系のヘッダー（21カラム）
         let csvContent = '\uFEFF';
-        csvContent += "日付,レース名,コース詳細,グレード・頭数,馬番,馬名,購入時人気,購入時オッズ,評価,購入時期待値,購入時クラス,近走監査,最終確定人気,最終確定オッズ,最終確定期待値,最終確定クラス,着順,MAO,実行フラグ,単勝払戻,ワイド払戻,三連複払戻\r\n";
+        csvContent += "日付,レース名,コース詳細,グレード・頭数,馬番,馬名,購入時人気,購入時オッズ,評価,購入時期待値,購入時クラス,最終確定人気,最終確定オッズ,最終確定期待値,最終確定クラス,着順,MAO,実行フラグ,単勝払戻,ワイド払戻,三連複払戻\r\n";
 
-        let tanshoPay = (lastResultData && lastResultData.payouts && lastResultData.payouts['単勝']) ? lastResultData.payouts['単勝'].replace(/,/g, '') : "";
-        let widePay = (lastResultData && lastResultData.payouts && lastResultData.payouts['ワイド']) ? lastResultData.payouts['ワイド'].replace(/円/g, "円 ").replace(/,/g, '').trim() : "";
-        let sanrenPay = (lastResultData && lastResultData.payouts && lastResultData.payouts['3連複']) ? lastResultData.payouts['3連複'].replace(/,/g, '') : "";
+        const tanshoPay = (lastResultData && lastResultData.payouts && lastResultData.payouts['単勝']) ? lastResultData.payouts['単勝'].replace(/,/g, '') : "-";
+        const widePay = (lastResultData && lastResultData.payouts && lastResultData.payouts['ワイド']) ? lastResultData.payouts['ワイド'].replace(/円/g, "円 ").replace(/,/g, '').trim() : "-";
+        const sanrenPay = (lastResultData && lastResultData.payouts && lastResultData.payouts['3連複']) ? lastResultData.payouts['3連複'].replace(/,/g, '') : "-";
 
         currentHorses.sort((a,b) => a.umaban - b.umaban).forEach(h => {
              const row = [
-                 dateStr,
-                 raceName,
-                 courseInfo,
-                 gradeStr,
-                 h.umaban,
-                 h.name,
-                 h.popular || "",
-                 h.odds.toFixed(1),
-                 h.rank,
-                 h.ev ? h.ev.toFixed(3) : "0.000",
-                 h.cls || "",
-                 h.audit || "-",
-                 h.finalPopular || "",
-                 h.finalOdds !== undefined ? h.finalOdds.toFixed(1) : "",
-                 h.finalEv !== undefined ? h.finalEv.toFixed(3) : "",
-                 h.finalCls || "",
-                 h.placing || "",
-                 h.mao !== undefined ? (h.mao === 999 ? "-" : h.mao.toFixed(1)) : "",
-                 h.amberPassed ? "○" : "×",
-                 tanshoPay,
-                 widePay,
-                 sanrenPay
+                 dateStr,                                // A: 日付
+                 raceName,                               // B: レース名
+                 courseInfo,                             // C: コース詳細
+                 gradeStr,                               // D: グレード・頭数
+                 h.umaban,                               // E: 馬番
+                 h.name,                                 // F: 馬名
+                 h.popular || "-",                       // G: 購入時人気
+                 h.odds.toFixed(1),                      // H: 購入時オッズ
+                 h.rank,                                 // I: 評価
+                 h.ev ? h.ev.toFixed(3) : "0.000",       // J: 購入時期待値
+                 h.cls || "N",                           // K: 購入時クラス
+                 h.finalPopular || "-",                  // L: 最終確定人気 (ここからズレを修正)
+                 (h.finalOdds && h.finalOdds > 0) ? h.finalOdds.toFixed(1) : "-", // M: 最終確定オッズ
+                 (h.finalEv !== undefined) ? h.finalEv.toFixed(3) : "-",         // N: 最終確定期待値
+                 h.finalCls || "-",                       // O: 最終確定クラス
+                 h.placing || "",                        // P: 着順
+                 (h.mao !== undefined && h.mao !== 999) ? h.mao.toFixed(1) : "-", // Q: MAO
+                 h.amberPassed ? "○" : "×",               // R: 実行フラグ
+                 tanshoPay,                              // S: 単勝払戻
+                 widePay,                                // T: ワイド払戻
+                 sanrenPay                               // U: 三連複払戻
              ];
              csvContent += row.join(',') + "\r\n";
         });
