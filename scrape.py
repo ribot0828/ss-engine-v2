@@ -80,6 +80,18 @@ class handler(BaseHTTPRequestHandler):
         name_elem = soup.select_one(".RaceName") or soup.select_one(".Race_Name") or soup.select_one("h1.RaceName")
         race_name = name_elem.get_text().strip() if name_elem else ""
 
+        # ---- 日付の確実な取得 ----
+        date_info = ""
+        if soup.title:
+            title_text = soup.title.get_text()
+            date_match = re.search(r'(\d{4})年(\d{1,2})月(\d{1,2})日', title_text)
+            if date_match:
+                date_info = f"{date_match.group(1)}-{date_match.group(2).zfill(2)}-{date_match.group(3).zfill(2)}"
+        
+        if not date_info:
+            date_info = datetime.now().strftime("%Y-%m-%d")
+        # ------------------------
+
         course_elem = soup.select_one(".RaceData01") or soup.select_one(".Race_Name_Box")
         course_info = ""
         if course_elem:
@@ -162,7 +174,7 @@ class handler(BaseHTTPRequestHandler):
         return {
             "race_name": race_name, "venue": "", "race_num": "",
             "course_info": course_info, "grade_info": grade_info, 
-            "date_info": datetime.now().strftime("%Y-%m-%d"),
+            "date_info": date_info,
             "horses": sorted(horses, key=lambda x: x["umaban"]), 
             "payouts": payouts,
             "odds_unavailable": not any(h["odds"] > 0 for h in horses)
