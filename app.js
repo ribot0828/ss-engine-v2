@@ -87,7 +87,11 @@ document.addEventListener('DOMContentLoaded', () => {
             const title = h.raceName ? (h.raceName.length > 20 ? h.raceName.substring(0,20)+"..." : h.raceName) : "不明なレース";
             const opt = document.createElement('option');
             opt.value = h.url;
-            opt.textContent = `${prefix}${title} (${dateStr})`;
+            
+            // ▼ 追加: 出力済みフラグの確認とマークの付与
+            const statusMark = h.isExported ? "✅ [出力済] " : "";
+            opt.textContent = `${statusMark}${prefix}${title} (${dateStr})`;
+            
             historySelect.appendChild(opt);
         });
         if (selectedUrl) historySelect.value = selectedUrl;
@@ -500,6 +504,14 @@ document.addEventListener('DOMContentLoaded', () => {
         document.body.appendChild(link);
         link.click();
         document.body.removeChild(link);
+
+        // ▼ 追加: CSV出力が完了したことを履歴に記録し、UIを更新する
+        const existingIdx = raceHistory.findIndex(h => h.url === lastFetchedUrl);
+        if (existingIdx >= 0) {
+            raceHistory[existingIdx].isExported = true;
+            localStorage.setItem('ss_engine_history', JSON.stringify(raceHistory));
+            renderHistoryDropdown(lastFetchedUrl);
+        }
     });
 
 });
