@@ -123,10 +123,14 @@ class handler(BaseHTTPRequestHandler):
                         name = name_a.get_text().strip() if name_a else "不明"
                         hid = re.search(r'/horse/(\d+)', name_a['href']).group(1) if name_a else "不明"
                         
-                        # 人気とオッズは末尾からの相対位置で取得し、混同を防ぐ
-                        pop = (row.select_one(".Popular") or cols[-3]).get_text().strip()
-                        odds_txt = (row.select_one(".Odds") or cols[-2]).get_text().strip().replace(',', '').replace('---.-', '0.0')
-                        odds = float(odds_txt) if odds_txt else 0.0
+                        # 人気とオッズは末尾からの相対位置で取得（修正後）
+                        odds_txt = cols[-3].get_text().strip().replace(',', '').replace('---.-', '0.0')
+                        try:
+                            odds = float(odds_txt)
+                        except ValueError:
+                            odds = 0.0
+
+                        pop = cols[-2].get_text().strip()
 
                         if umaban in seen_umaban: continue
                         seen_umaban.add(umaban)

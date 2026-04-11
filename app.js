@@ -452,21 +452,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const courseInfo = document.getElementById('raceCourse').textContent.replace(/,/g, '');
         const gradeStr = savedGradeInfo.replace(/,/g, '');
         
-        let dateStr = savedDateInfo.replace(/,/g, '');
-        if (!dateStr || dateStr === "2026-04-11") {
-            const m = lastFetchedUrl.match(/race_id=([0-9]{4})([0-9]{2})[0-9]{6}/);
-            if(m) dateStr = `${m[1]}-${m[2]}-xx`;
-            else dateStr = new Date().toISOString().split('T')[0];
-        } else {
-             const yMatch = lastFetchedUrl.match(/race_id=([0-9]{4})/);
-             const year = yMatch ? yMatch[1] : new Date().getFullYear();
-             const mdMatch = dateStr.match(/([0-9]+)月([0-9]+)日/);
-             if (mdMatch) {
-                 const mm = mdMatch[1].padStart(2, '0');
-                 const dd = mdMatch[2].padStart(2, '0');
-                 dateStr = `${year}-${mm}-${dd}`;
-             }
-        }
+        let dateStr = savedDateInfo ? savedDateInfo.replace(/,/g, '').trim() : new Date().toISOString().split('T')[0];
 
         const getPay = (key) => {
             if (lastResultData && lastResultData.payouts && lastResultData.payouts[key]) {
