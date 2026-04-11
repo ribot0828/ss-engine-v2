@@ -165,32 +165,41 @@ class handler(BaseHTTPRequestHandler):
 
         # 1. メタデータの抽出
         if is_odds_view:
-            # オッズ画面専用のメタ抽出
-            race_name_elem = soup.select_one("h1.RaceName") or soup.select_one(".RaceName")
-            race_name = race_name_elem.text.strip() if race_name_elem else "不明なレース"
+            # オッズ画面専用のメタ抽出（クラス名の表記ゆれに対応）
+            race_name_elem = soup.select_one("h1.Race_Name") or soup.select_one("h1.RaceName") or soup.select_one(".Race_Name") or soup.select_one(".RaceName")
+            race_name = race_name_elem.text.strip() if race_name_elem else ""
+            
+            # レース名が取れない場合のタイトル補完
+            if not race_name and soup.title:
+                title_parts = soup.title.text.split(' オッズ')
+                if title_parts: race_name = title_parts[0].strip()
 
             race_num_elem = soup.select_one(".RaceNum") or soup.select_one(".Race_Num")
             race_num = race_num_elem.text.strip() if race_num_elem else ""
 
             venue = ""
-            venue_elem = soup.select_one(".Race_Date a") or soup.select_one(".Race_Date")
+            venue_elem = soup.select_one(".Race_Date a") or soup.select_one(".Race_Date") or soup.select_one(".Race_Name_Box .Date")
             if venue_elem:
                 venue_text = venue_elem.get_text().strip()
                 v_match = re.search(r'([^\d\(\)\s/]+)$', venue_text)
                 if v_match: venue = v_match.group(1)
             
-            course_info_elem = soup.select_one(".RaceData01")
+            # コース情報の抽出
+            course_info_elem = soup.select_one(".RaceData01") or soup.select_one(".Race_Name_Box") or soup.select_one(".Race_Data")
             if course_info_elem:
-                course_info = course_info_elem.text.strip().replace('\n', ' ')
+                course_info = course_info_elem.get_text().strip().replace('\n', ' ')
+                # 余分なテキスト（特集など）を除去
+                course_info = course_info.split('特集')[0].split('データベース')[0].strip()
             else:
                 course_info = ""
             
             grade_info = "不明"
-            grade_match = re.search(r'(オープン|3勝クラス|2勝クラス|1勝クラス|新馬|未勝利|OP|G1|G2|G3|GⅠ|GⅡ|GⅢ)', race_name + course_info)
+            # レース名やコース情報からグレードを推測
+            grade_match = re.search(r'(オープン|3勝クラス|2勝クラス|1勝クラス|新馬|未勝利|OP|G[1-3]|GⅠ|GⅡ|GⅢ)', race_name + course_info)
             if grade_match:
                 grade_info = grade_match.group(1)
             
-            date_info = "" # オッズ画面からは日付取得が難しいため空（historyで補完）
+            date_info = "" 
         else:
             # 通常（出馬表/結果）のメタ抽出
             race_name_elem = soup.select_one(".RaceName")
