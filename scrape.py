@@ -253,25 +253,27 @@ class handler(BaseHTTPRequestHandler):
 
         if is_odds_view:
             # オッズ画面構造
-            rows = soup.select(".RaceHorseList li")
+            rows = soup.select(".RaceHorseList li") or soup.select(".Odds_Table tr")
             for i, row in enumerate(rows):
                 try:
-                    num_elem = row.select_one(".Horse_Num")
-                    name_elem = row.select_one(".Horse_Name") or row.select_one("dt")
-                    odds_elem = row.select_one(".Odds_Win")
-                    pop_elem = row.select_one(".Popular")
-                    
+                    num_elem = row.select_one(".Horse_Num") or row.select_one("td[class^='Waku']")
+                    name_elem = row.select_one(".Horse_Name") or row.select_one("dt") or row.select_one("td.Horse_Name")
                     if not name_elem: continue
-                    name = name_elem.text.strip()
+                    
+                    # 馬名のみを取得
+                    name = name_elem.get_text().strip()
                     if "データがありません" in name: continue
 
                     try:
-                        umaban = int(num_elem.text.strip()) if num_elem else i + 1
+                        umaban_text = num_elem.get_text().strip() if num_elem else ""
+                        umaban = int(umaban_text) if umaban_text.isdigit() else i + 1
                     except:
                         umaban = i + 1
                     
-                    odds_txt = odds_elem.text.strip().replace('---.-', '0.0') if odds_elem else "0.0"
-                    popular = pop_elem.text.strip() if pop_elem else ""
+                    odds_elem = row.select_one(".Odds_Win") or row.select_one(".Odds")
+                    odds_txt = odds_elem.get_text().strip().replace('---.-', '0.0') if odds_elem else "0.0"
+                    pop_elem = row.select_one(".Popular")
+                    popular = pop_elem.get_text().strip() if pop_elem else ""
 
                     horse_id = "不明"
                     horse_link = name_elem.select_one("a") or row.select_one("a[href*='/horse/']")
@@ -304,38 +306,37 @@ class handler(BaseHTTPRequestHandler):
                         if id_match: horse_id = id_match.group(1)
 
                     if is_result_page:
+                        # 結果ページ
                         rank_elem = row.select_one("td.Result_Num") or row.select_one("td[class*='Result_Num']") or row.select_one("td.Rank")
                         placing = rank_elem.text.strip() if rank_elem else ""
-
                         umaban_elem = row.select_one("td.Num.Txt_C") or row.select_one("td[class*='Num']")
                         if not umaban_elem: continue
-                        try:
-                            umaban = int(umaban_elem.text.strip())
+                        try: umaban = int(umaban_elem.text.strip())
                         except ValueError: continue
-
                         horse_name_elem = row.select_one(".Horse_Info")
                         horse_name = horse_name_elem.text.strip() if horse_name_elem else "不明"
-
-                        odds_tds = row.select("td[class*='Odds']")
-                        if len(odds_tds) >= 2:
-                            popular = odds_tds[0].text.strip()
-                            odds_text = odds_tds[1].text.strip()
-                        else:
-                            odds_elem = row.select_one("td.Odds.Txt_R") or row.select_one("td.Odds")
-                            odds_text = odds_elem.text.strip() if odds_elem else "0.0"
+                        # 結果ページは通常馬名に年齢は混ざらない
                     else:
+                        # 出馬表ページ
                         umaban_elem = row.select_one("td[class^='Umaban']") or row.select_one("td.Umaban")
                         if umaban_elem:
+                            # PC版
                             try: umaban = int(umaban_elem.text.strip())
                             except ValueError: continue
-                            horse_name_elem = row.select_one(".HorseName a") or row.select_one(".HorseName") or row.select_one(".HorseInfo")
+                            horse_name_elem = row.select_one(".HorseName a") or row.select_one(".HorseName")
                             horse_name = horse_name_elem.text.strip() if horse_name_elem else "不明"
                         else:
-                            horse_info_elem = row.select_one("td.Horse_Info") or row.select_one("td.HorseName")
-                            if horse_info_elem:
-                                for tag in horse_info_elem.find_all(['span', 'small', 'a']): tag.decompose()
-                                horse_name = horse_info_elem.text.strip().split('\n')[0].strip()
-                                if not horse_name or horse_name == "不明": continue
+                            # SP版
+                            horse_info_td = row.select_one("td.Horse_Info") or row.select_one("td.HorseName")
+                            if horse_info_td:
+                                # 馬名だけを取得するために inner <a> などを優先
+                                name_a = horse_info_td.select_one("dt.Horse a") or horse_info_td.select_one("a[href*='/horse/']")
+                                if name_a:
+                                    horse_name = name_a.get_text().strip()
+                                else:
+                                    # フォールバック
+                                    horse_name = horse_info_td.get_text().strip().split('\n')[0].strip()
+                                
                                 umaban_txt = row.select_one(".Horse_Num") or row.select_one("td:nth-of-type(1)")
                                 try: umaban = int(umaban_txt.text.strip())
                                 except: umaban = i + 1
@@ -343,8 +344,7 @@ class handler(BaseHTTPRequestHandler):
 
                         opts = row.select("td.Popular") or row.select("td.Txt_C.Popular")
                         popular = opts[0].text.strip() if opts else ""
-
-                        odds_elem = row.select_one("td.Txt_R span") or row.select_one("td.Popular span") or row.select_one("td.Odds span") or row.select_one("td.Txt_R.Popular") or row.select_one("td.Popular") or row.select_one("td.Txt_R")
+                        odds_elem = row.select_one("td.Txt_R span") or row.select_one("td.Popular span") or row.select_one("td.Odds span") or row.select_one("td.Txt_R.Popular")
                         odds_text = odds_elem.text.strip() if odds_elem else "0.0"
                     
                     try:
