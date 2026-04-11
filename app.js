@@ -467,8 +467,14 @@ document.addEventListener('DOMContentLoaded', () => {
         let csvContent = '\uFEFF';
         csvContent += "日付,レース名,コース詳細,グレード・頭数,馬番,馬名,購入時人気,購入時オッズ,評価,購入時期待値,購入時クラス,最終確定人気,最終確定オッズ,最終確定期待値,最終確定クラス,着順,MAO,実行フラグ,単勝払戻,ワイド払戻,三連複払戻\r\n";
 
+        // ▼ 追加: CSVを破壊する文字（改行、カンマ）をスペースに置換する関数
+        const sanitize = (val) => {
+            if (val === null || val === undefined) return "-";
+            return String(val).replace(/[\r\n,]/g, ' ').trim();
+        };
+
         currentHorses.sort((a,b) => a.umaban - b.umaban).forEach(h => {
-             const row = [
+             const rawRow = [
                  dateStr, raceName, courseInfo, gradeStr, h.umaban, h.name,
                  h.popular || "-", h.odds ? h.odds.toFixed(1) : "0.0",
                  h.rank, h.ev ? h.ev.toFixed(3) : "0.000", h.cls || "N",
@@ -481,7 +487,9 @@ document.addEventListener('DOMContentLoaded', () => {
                  h.amberPassed ? "○" : "×",
                  tanshoPay, widePay, sanrenPay
              ];
-             csvContent += row.join(',') + "\r\n";
+             // ▼ 変更: 全要素をサニタイズしてからカンマ区切りにする
+             const safeRow = rawRow.map(item => sanitize(item));
+             csvContent += safeRow.join(',') + "\r\n";
         });
 
         const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });

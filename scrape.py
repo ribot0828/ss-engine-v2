@@ -114,32 +114,48 @@ class handler(BaseHTTPRequestHandler):
         if is_result:
             table = soup.select_one(".ResultTable") or soup.select_one("table[summary='全着順']")
             if table:
+                # 1. ヘッダーから列のインデックスを動的に取得
+                header_elems = table.select("th")
+                headers = [th.get_text().strip() for th in header_elems]
+                umaban_idx = 2
+                pop_idx = 9
+                odds_idx = 10
+                
+                for i, h in enumerate(headers):
+                    if '馬番' in h: umaban_idx = i
+                    elif '人気' in h: pop_idx = i
+                    elif '単勝' in h: odds_idx = i
+
+                # 2. 取得したインデックスを使って安全にデータを抽出
                 for row in table.select("tr"):
                     cols = row.select("td")
-                    if len(cols) < 10: continue
+                    if len(cols) <= max(umaban_idx, pop_idx, odds_idx): continue
                     try:
-                        umaban = int(re.sub(r'\D', '', cols[2].get_text().strip()))
+                        umaban_txt = cols[umaban_idx].get_text().strip()
+                        umaban = int(re.sub(r'\D', '', umaban_txt))
+                        
                         name_a = row.select_one("a[href*='/horse/']")
-                        name = name_a.get_text().strip() if name_a else "不明"
+                        name = name_a.get_text().strip().replace('\n', ' ') if name_a else "不明"
                         hid = re.search(r'/horse/(\d+)', name_a['href']).group(1) if name_a else "不明"
                         
-                        # 人気とオッズは末尾からの相対位置で取得（修正後）
-                        odds_txt = cols[-3].get_text().strip().replace(',', '').replace('---.-', '0.0')
+                        # 改行をスペースに置換してCSV破壊を防ぐ
+                        pop = cols[pop_idx].get_text().strip().replace('\n', ' ')
+                        odds_txt = cols[odds_idx].get_text().strip().replace(',', '').replace('---.-', '0.0').replace('\n', ' ')
+                        
                         try:
                             odds = float(odds_txt)
                         except ValueError:
                             odds = 0.0
-
-                        pop = cols[-2].get_text().strip()
 
                         if umaban in seen_umaban: continue
                         seen_umaban.add(umaban)
                         horses.append({
                             "umaban": umaban, "name": name, "horse_id": hid, 
                             "odds": odds, "popular": pop, "rank": "B", 
-                            "placing": cols[0].get_text().strip(), "audit": "-"
+                            "placing": cols[0].get_text().strip().replace('\n', ' '), "audit": "-"
                         })
-                    except: pass
+                    except Exception as e:
+                        pass
         else:
             for row in soup.select(".HorseList"):
                 try:
