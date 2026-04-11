@@ -162,6 +162,25 @@ class handler(BaseHTTPRequestHandler):
         race_name_elem = soup.select_one(".RaceName")
         race_name = race_name_elem.text.strip() if race_name_elem else "不明なレース"
 
+        # レース番号の抽出
+        race_num_elem = soup.select_one(".RaceNum") or soup.select_one(".Race_Num")
+        race_num = race_num_elem.text.strip() if race_num_elem else ""
+
+        # 開催場の抽出
+        venue = ""
+        venue_elem = soup.select_one(".RaceList_DateList .Active") or soup.select_one(".Race_Date")
+        if venue_elem:
+            venue = venue_elem.get_text().strip()
+            # 「4/11(土) 阪神」のような形式から「阪神」を抽出
+            v_match = re.search(r'([^\d\(\)\s/]+)$', venue)
+            if v_match: venue = v_match.group(1)
+        
+        if not venue and race_id:
+            # race_idから会場コードで判別 (JRA)
+            venue_code = race_id[4:6]
+            jra_venues = {"01":"札幌","02":"函館","03":"福島","04":"新潟","05":"東京","06":"中山","07":"中京","08":"京都","09":"阪神","10":"小倉"}
+            venue = jra_venues.get(venue_code, "")
+
         course_info_elem = soup.select_one(".RaceData01")
         if course_info_elem:
             course_text = course_info_elem.text.strip().replace('\n', ' ')
@@ -318,6 +337,8 @@ class handler(BaseHTTPRequestHandler):
 
         return {
             "race_name": race_name,
+            "venue": venue,
+            "race_num": race_num,
             "course_info": course_info,
             "grade_info": grade_info,
             "date_info": date_info,

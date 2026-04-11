@@ -23,6 +23,8 @@ document.addEventListener('DOMContentLoaded', () => {
     let lastResultData = null;
     let isGradeRace = false; 
     let lastFetchedUrl = "";
+    let currentVenue = "";
+    let currentRaceNum = "";
     let autoUpdateInterval = null;
 
     const showError = (msg) => {
@@ -53,6 +55,8 @@ document.addEventListener('DOMContentLoaded', () => {
         const historyItem = {
             url: lastFetchedUrl,
             raceName: document.getElementById('raceTitle').textContent,
+            venue: currentVenue || "",
+            raceNum: currentRaceNum || "",
             courseInfo: document.getElementById('raceCourse').textContent,
             gradeInfo: savedGradeInfo,
             dateInfo: savedDateInfo,
@@ -79,10 +83,11 @@ document.addEventListener('DOMContentLoaded', () => {
         historySelect.innerHTML = '<option value="">-- 新規取得 (現在の出馬表) --</option>';
         raceHistory.forEach(h => {
             const dateStr = new Date(h.timestamp).toLocaleString('ja-JP', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' });
-            const title = h.raceName ? (h.raceName.length > 15 ? h.raceName.substring(0,15)+"..." : h.raceName) : "不明なレース";
+            const prefix = (h.venue || h.raceNum) ? `[${h.venue || ''}${h.raceNum || ''}] ` : "";
+            const title = h.raceName ? (h.raceName.length > 20 ? h.raceName.substring(0,20)+"..." : h.raceName) : "不明なレース";
             const opt = document.createElement('option');
             opt.value = h.url;
-            opt.textContent = `${title} (${dateStr})`;
+            opt.textContent = `${prefix}${title} (${dateStr})`;
             historySelect.appendChild(opt);
         });
         if (selectedUrl) historySelect.value = selectedUrl;
@@ -109,6 +114,9 @@ document.addEventListener('DOMContentLoaded', () => {
             updateOddsBtn.classList.remove('cursor-not-allowed', 'bg-gray-600');
             updateOddsBtn.classList.add('bg-blue-600', 'hover:bg-blue-500');
             autoUpdateCheck.disabled = false;
+            
+            currentVenue = item.venue || "";
+            currentRaceNum = item.raceNum || "";
             
             renderTable();
             resultsPanel.style.display = 'none';
@@ -150,6 +158,9 @@ document.addEventListener('DOMContentLoaded', () => {
             
             savedGradeInfo = data.grade_info || "";
             savedDateInfo = data.date_info || "";
+            
+            currentVenue = data.venue || "";
+            currentRaceNum = data.race_num || "";
             
             currentHorses = data.horses.sort((a,b) => a.umaban - b.umaban);
             isGradeRace = data.race_name ? data.race_name.includes('G1') || data.race_name.includes('G2') || data.race_name.includes('G3') : false;
