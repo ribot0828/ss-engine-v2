@@ -27,8 +27,34 @@ class handler(BaseHTTPRequestHandler):
             self.wfile.write(json.dumps({"error": "Scraping failed: " + str(e)}).encode('utf-8'))
         return
 
+    def fetch_odds_api(self, race_id):
+        """netkeiba Odds APIから単勝オッズと人気を取得"""
+        api_url = f"https://race.netkeiba.com/api/api_get_jra_odds.html?race_id={race_id}&type=1"
+        try:
+            headers = {
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+            }
+            res = requests.get(api_url, headers=headers, timeout=5)
+            data = res.json()
+            if data.get("status") in ["result", "middle_now"] and data.get("data") and data["data"].get("odds"):
+                odds_map = {}
+                for bracket, horses in data["data"]["odds"].items():
+                    for umaban_str, vals in horses.items():
+                        try:
+                            umaban = int(umaban_str)
+                            odds = float(vals[0]) if vals[0] else 0.0
+                            popular = vals[2] if len(vals) > 2 else ""
+                            odds_map[umaban] = {"odds": odds, "popular": str(popular)}
+                        except (ValueError, IndexError):
+                            pass
+                return odds_map
+        except Exception:
+            pass
+        return {}
+
     def scrape_netkeiba(self, url):
         match = re.search(r'race_id=(\d+)', url)
+        race_id = None
         if match:
             race_id = match.group(1)
             page_type = 'result' if 'result' in url else 'shutuba'
@@ -129,6 +155,10 @@ class handler(BaseHTTPRequestHandler):
                 except ValueError:
                     odds = 0.0
 
+                # Clean up invalid placeholder values
+                if popular in ['**', '---.-', '-', '']:
+                    popular = ''
+
                 if umaban in seen_umaban:
                     continue
                 seen_umaban.add(umaban)
@@ -143,6 +173,17 @@ class handler(BaseHTTPRequestHandler):
                 })
             except Exception as e:
                 pass
+
+        # 出馬表ページでオッズがJS遅延ロードの場合、APIから補完
+        if not is_result_page and race_id:
+            has_valid_odds = any(h["odds"] > 0 for h in horses)
+            if not has_valid_odds:
+                odds_map = self.fetch_odds_api(race_id)
+                for h in horses:
+                    api_data = odds_map.get(h["umaban"])
+                    if api_data:
+                        h["odds"] = api_data["odds"]
+                        h["popular"] = api_data["popular"]
 
         payouts = {}
         for tbl in soup.select('.Payout_Detail_Table'):
