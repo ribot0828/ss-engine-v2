@@ -100,26 +100,29 @@ class handler(BaseHTTPRequestHandler):
             course_info = re.sub(r'^[0-9]+:[0-9]+\s*発走\s*/\s*', '', t).split('特集')[0].strip()
 
         grade_info = ""
-        grade_icon = soup.select_one('.Icon_GradeType')
+        # 1. 属性部分一致でグレードアイコンを確実に捕捉 (Icon_GradeType1, 2, 3...)
+        grade_icon = soup.select_one('span[class*="Icon_GradeType"]')
         if grade_icon:
             grade_info = grade_icon.get_text().strip().replace('GⅠ', 'G1').replace('GⅡ', 'G2').replace('GⅢ', 'G3')
         
+        # 2. アイコンがない場合、レース名やコース情報から詳しく判定
         if not grade_info:
-            # レース名やコース情報からクラスを推測
             look_text = race_name + " " + course_info
-            # 優先度の高い順に検索
+            # 地方Jpn表示やリステッド、オープンなどを順次検索
             patterns = [
-                r'(G1|G2|G3|GⅠ|GⅡ|GⅢ)',
-                r'(オープン|OP)',
-                r'([1-3]勝クラス)',
-                r'(新馬|未勝利)',
-                r'(J\.G[1-3])',
-                r'(重賞)'
+                (r'G[1-3]', None),
+                (r'GⅠ|GⅡ|GⅢ', lambda m: m.replace('GⅠ','G1').replace('GⅡ','G2').replace('GⅢ','G3')),
+                (r'Jpn[1-3]', None),
+                (r'\(L\)', lambda m: "L"),
+                (r'(オープン|OP)', lambda m: "OP"),
+                (r'([1-3]勝クラス)', None),
+                (r'(新馬|未勝利)', None)
             ]
-            for p in patterns:
-                gm = re.search(p, look_text)
-                if gm:
-                    grade_info = gm.group(1).replace('GⅠ', 'G1').replace('GⅡ', 'G2').replace('GⅢ', 'G3')
+            for p, converter in patterns:
+                m = re.search(p, look_text, re.IGNORECASE)
+                if m:
+                    res = m.group(0)
+                    grade_info = converter(res) if converter else res
                     break
         
         if not grade_info: grade_info = "一般"

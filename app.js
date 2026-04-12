@@ -172,10 +172,22 @@ document.addEventListener('DOMContentLoaded', () => {
             currentHorses = data.horses.sort((a,b) => a.umaban - b.umaban);
             isGradeRace = data.race_name ? data.race_name.includes('G1') || data.race_name.includes('G2') || data.race_name.includes('G3') : false;
             
-            // ▼ 追加: グレードと頭数を自動計算してUIにセット
-            const headcount = currentHorses.length;
-            const autoGrade = `${savedGradeInfo} ${headcount}頭`.trim();
-            document.getElementById('raceGrade').value = autoGrade;
+            // ▼ 改良: グレードの二段構え抽出 (JSONデータ優先、なければレース名から推測)
+            let extractedGrade = "";
+            if (data.grade_info && data.grade_info !== "一般") {
+                extractedGrade = data.grade_info.trim() + " ";
+            } else if (data.race_name) {
+                // レース名から G1, Jpn1, OP などを抽出
+                const gradeMatch = data.race_name.match(/(G[1-3]|Jpn[1-3]|L|OP)/i);
+                if (gradeMatch) {
+                    extractedGrade = gradeMatch[1].toUpperCase() + " ";
+                }
+            }
+            const headcountStr = `${currentHorses.length}頭`;
+            const gradeEl = document.getElementById('raceGrade');
+            if (gradeEl) {
+                gradeEl.value = `${extractedGrade}${headcountStr}`;
+            }
             
             lastFetchedUrl = url;
             updateOddsBtn.disabled = false;
