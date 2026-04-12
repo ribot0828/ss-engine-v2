@@ -99,13 +99,30 @@ class handler(BaseHTTPRequestHandler):
             t = re.sub(r'\s+', ' ', t)
             course_info = re.sub(r'^[0-9]+:[0-9]+\s*発走\s*/\s*', '', t).split('特集')[0].strip()
 
-        grade_info = "不明"
+        grade_info = ""
         grade_icon = soup.select_one('.Icon_GradeType')
         if grade_icon:
-            grade_info = grade_icon.get_text().strip()
-        else:
-            gm = re.search(r'(オープン|3勝クラス|2勝クラス|1勝クラス|新馬|未勝利|OP|G[1-3]|GⅠ|GⅡ|GⅢ)', race_name + course_info)
-            if gm: grade_info = gm.group(1)
+            grade_info = grade_icon.get_text().strip().replace('GⅠ', 'G1').replace('GⅡ', 'G2').replace('GⅢ', 'G3')
+        
+        if not grade_info:
+            # レース名やコース情報からクラスを推測
+            look_text = race_name + " " + course_info
+            # 優先度の高い順に検索
+            patterns = [
+                r'(G1|G2|G3|GⅠ|GⅡ|GⅢ)',
+                r'(オープン|OP)',
+                r'([1-3]勝クラス)',
+                r'(新馬|未勝利)',
+                r'(J\.G[1-3])',
+                r'(重賞)'
+            ]
+            for p in patterns:
+                gm = re.search(p, look_text)
+                if gm:
+                    grade_info = gm.group(1).replace('GⅠ', 'G1').replace('GⅡ', 'G2').replace('GⅢ', 'G3')
+                    break
+        
+        if not grade_info: grade_info = "一般"
 
         # 3. 馬リストの抽出
         horses = []

@@ -114,6 +114,9 @@ document.addEventListener('DOMContentLoaded', () => {
             savedGradeInfo = item.gradeInfo || "";
             savedDateInfo = item.dateInfo || "";
             
+            // ▼ 追加: グレード・頭数をUIに復元
+            document.getElementById('raceGrade').value = savedGradeInfo;
+            
             updateOddsBtn.disabled = false;
             updateOddsBtn.classList.remove('cursor-not-allowed', 'bg-gray-600');
             updateOddsBtn.classList.add('bg-blue-600', 'hover:bg-blue-500');
@@ -168,6 +171,11 @@ document.addEventListener('DOMContentLoaded', () => {
             
             currentHorses = data.horses.sort((a,b) => a.umaban - b.umaban);
             isGradeRace = data.race_name ? data.race_name.includes('G1') || data.race_name.includes('G2') || data.race_name.includes('G3') : false;
+            
+            // ▼ 追加: グレードと頭数を自動計算してUIにセット
+            const headcount = currentHorses.length;
+            const autoGrade = `${savedGradeInfo} ${headcount}頭`.trim();
+            document.getElementById('raceGrade').value = autoGrade;
             
             lastFetchedUrl = url;
             updateOddsBtn.disabled = false;
@@ -454,7 +462,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
         const raceName = document.getElementById('raceTitle').textContent.replace(/,/g, '');
         const courseInfo = document.getElementById('raceCourse').textContent.replace(/,/g, '');
-        const gradeStr = savedGradeInfo.replace(/,/g, '');
+        // ▼ 修正: 保存された変数ではなく、画面の入力欄の最新値を取得
+        const gradeStr = (document.getElementById('raceGrade').value || `${currentHorses.length}頭`).replace(/,/g, '');
         
         let dateStr = savedDateInfo ? savedDateInfo.replace(/,/g, '').trim() : new Date().toISOString().split('T')[0];
 
