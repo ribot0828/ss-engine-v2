@@ -103,7 +103,8 @@ class handler(BaseHTTPRequestHandler):
         # 1. 優先アプローチ: <title>タグから抽出 (SEOフォーマットのため最も信頼性が高い)
         if soup.title and soup.title.string:
             title_text = soup.title.string
-            grade_match = re.search(r'(G[1-3]|G[ⅠⅡⅢ]|Jpn[1-3]|Jpn[ⅠⅡⅢ]|L|OP|オープン|[1-3]勝クラス|未勝利|新馬)', title_text, re.IGNORECASE)
+            # ローマ数字（Ⅰ, Ⅱ, Ⅲ）および単独のL（境界チェック付）に対応した正規表現
+            grade_match = re.search(r'(G[1-3]|G[ⅠⅡⅢ]|Jpn[1-3]|Jpn[ⅠⅡⅢ]|(?<![a-zA-Z])L(?![a-zA-Z])|OP|オープン|[1-3]勝クラス|未勝利|新馬)', title_text, re.IGNORECASE)
             if grade_match:
                 grade_info = grade_match.group(1).upper()
                 # ローマ数字をアラビア数字に変換
@@ -114,7 +115,8 @@ class handler(BaseHTTPRequestHandler):
             race_data_block = soup.find('div', class_='RaceData01') or soup.find('div', class_='RaceList_Item02')
             if race_data_block:
                 block_text = race_data_block.get_text()
-                grade_match = re.search(r'(G[1-3]|G[ⅠⅡⅢ]|Jpn[1-3]|Jpn[ⅠⅡⅢ]|L|OP|オープン|[1-3]勝クラス|未勝利|新馬)', block_text, re.IGNORECASE)
+                # 単独のL（境界チェック付）にも対応した正規表現
+                grade_match = re.search(r'(G[1-3]|G[ⅠⅡⅢ]|Jpn[1-3]|Jpn[ⅠⅡⅢ]|(?<![a-zA-Z])L(?![a-zA-Z])|OP|オープン|[1-3]勝クラス|未勝利|新馬)', block_text, re.IGNORECASE)
                 if grade_match:
                     grade_info = grade_match.group(1).upper()
                     grade_info = grade_info.replace('Ⅰ', '1').replace('Ⅱ', '2').replace('Ⅲ', '3').replace('オープン', 'OP')

@@ -51,6 +51,11 @@ document.addEventListener('DOMContentLoaded', () => {
 
     const saveToHistory = () => {
         if (!lastFetchedUrl || currentHorses.length === 0) return;
+        
+        // ▼ 修正: 画面の入力欄から最新の値を直接取得して保存 (手動修正や頭数情報を確実に保持)
+        const gradeInput = document.getElementById('raceGrade');
+        const currentGradeValue = gradeInput ? gradeInput.value : savedGradeInfo;
+        
         const existingIdx = raceHistory.findIndex(h => h.url === lastFetchedUrl);
         const historyItem = {
             url: lastFetchedUrl,
@@ -58,7 +63,7 @@ document.addEventListener('DOMContentLoaded', () => {
             venue: currentVenue || "",
             raceNum: currentRaceNum || "",
             courseInfo: document.getElementById('raceCourse').textContent,
-            gradeInfo: savedGradeInfo,
+            gradeInfo: currentGradeValue,
             dateInfo: savedDateInfo,
             horses: JSON.parse(JSON.stringify(currentHorses)),
             timestamp: new Date().getTime(),
@@ -419,7 +424,22 @@ document.addEventListener('DOMContentLoaded', () => {
                 }
             }
             if (data.date_info) savedDateInfo = data.date_info;
-            if (data.grade_info) savedGradeInfo = data.grade_info;
+            
+            // ▼ 修正: グレードと頭数をUIに強制セット（同期）
+            let finalGrade = "";
+            if (data.grade_info && data.grade_info !== "一般" && data.grade_info.trim() !== "") {
+                savedGradeInfo = data.grade_info; // 内部変数も更新
+                finalGrade = data.grade_info.trim() + " ";
+            } else if (savedGradeInfo) {
+                // 結果URLから取れなかった場合は既存の変数を維持
+                finalGrade = savedGradeInfo.trim() + " ";
+            }
+
+            const gradeInput = document.getElementById('raceGrade');
+            if (gradeInput) {
+                // 画面のボックスを「G1 18頭」のように上書きする
+                gradeInput.value = `${finalGrade}${currentHorses.length}頭`.trim();
+            }
 
             let mergedCount = 0;
             data.horses.forEach(resHorse => {
@@ -471,8 +491,8 @@ document.addEventListener('DOMContentLoaded', () => {
         const raceName = document.getElementById('raceTitle').textContent.replace(/,/g, '');
         const courseInfo = document.getElementById('raceCourse').textContent.replace(/,/g, '');
         
-        // ▼ 刷新: 内部変数ではなく、DOM（入力欄）にある最新の値を直接参照して出力
-        const gradeValueForCsv = document.getElementById('raceGrade').value;
+        // ▼ 修正: UIの値が空だった場合のフォールバックを強化
+        const gradeValueForCsv = document.getElementById('raceGrade').value.trim();
         const gradeStr = (gradeValueForCsv || `${currentHorses.length}頭`).replace(/,/g, '');
         
         let dateStr = savedDateInfo ? savedDateInfo.replace(/,/g, '').trim() : new Date().toISOString().split('T')[0];
