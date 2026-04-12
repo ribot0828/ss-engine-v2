@@ -514,49 +514,42 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
-    // JRA Odds Batch Input Logic (Revised: Forgiving Matching)
+    // JRA Odds Batch Input Logic (Revised: Search-based Matching)
     document.getElementById('applyJraOddsBtn').addEventListener('click', () => {
         const rawText = document.getElementById('jraOddsInput').value;
         if (!rawText) return;
 
-        const lines = rawText.split('\n');
+        // JRAのコピペは改行が多いため、一旦すべての改行をスペースに置換して1本の長い文字列にする
+        const cleanText = rawText.replace(/\n/g, ' ').replace(/\s+/g, ' ');
+        
         let count = 0;
 
-        lines.forEach(line => {
-            // (\d+) : 枠+馬番の数字の塊
-            // ([^\d\.\s]+) : 馬名
-            // \s*(\d+\.\d+) : 単勝オッズ
-            const match = line.match(/(\d+)([^\d\.\s]+)\s*(\d+\.\d+)/);
+        // アプリ内の馬リスト1頭ずつに対して、テキスト内からオッズを探す
+        currentHorses.forEach(horse => {
+            const hName = String(horse.name || horse.馬名 || '').trim();
+            if (!hName) return;
+
+            // 馬名の直後にある「数値.数値」のパターンを検索する正規表現
+            // 例: "フェスティバルヒル 20.0" や "フェスティバルヒル20.0" に対応
+            const escapedName = hName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); // 記号対策
+            const regex = new RegExp(escapedName + "[^0-9.]*([0-9]+\\.[0-9]+)");
+            
+            const match = cleanText.match(regex);
             
             if (match) {
-                const namePart = match[2].trim(); // JRA側の馬名
-                const odds = parseFloat(match[3]); // オッズ
-
-                // 寛容な紐付けロジック
-                const horse = currentHorses.find(h => {
-                    // アプリ内のプロパティ名がどれであっても対応できるように網羅
-                    const hName = String(h.name || h.umaName || h.horseName || h['馬名'] || h.馬名 || '').trim();
-                    if (!hName) return false;
-
-                    // 双方向の部分一致で記号などの揺れを吸収
-                    return hName.includes(namePart) || namePart.includes(hName);
-                });
-                
-                if (horse && !isNaN(odds)) {
+                const odds = parseFloat(match[1]);
+                if (!isNaN(odds)) {
                     horse.odds = odds;
                     count++;
-                } else {
-                    // 紐付け失敗時はデバッグ用にコンソール出力
-                    console.log(`照合失敗: 抽出名=[${namePart}], オッズ=[${odds}]`);
                 }
             }
         });
 
         if (count > 0) {
             renderTable(); // 画面を更新し、手動入力のinput欄にも数値を反映させる
-            alert(`${count}頭のオッズを反映しました。手動での微調整も可能です。`);
+            alert(`${count}頭のオッズを反映しました。スマホ版でも動作を確認してください。`);
         } else {
-            alert("オッズの抽出はできましたが、システム内の馬名と一致しませんでした。[F12]キーを押してConsoleタブのエラーを確認してください。");
+            alert("オッズが見つかりませんでした。馬名が一致しているか、または単勝オッズが表示されているか確認してください。");
         }
     });
 
