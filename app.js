@@ -172,23 +172,24 @@ document.addEventListener('DOMContentLoaded', () => {
             currentHorses = data.horses.sort((a,b) => a.umaban - b.umaban);
             isGradeRace = data.race_name ? data.race_name.includes('G1') || data.race_name.includes('G2') || data.race_name.includes('G3') : false;
             
-            // ▼ 改良: ローマ数字対応の二段構え抽出
-            let extractedGrade = "";
+            // ▼ 復元・強化: グレードと頭数を「合体」させて表示
+            let finalGrade = "";
             if (data.grade_info && data.grade_info !== "一般" && data.grade_info.trim() !== "") {
-                extractedGrade = data.grade_info.trim() + " ";
+                finalGrade = data.grade_info.trim() + " ";
             } else if (data.race_name || data.course_info) {
+                // レース名やコース詳細からのフォールバック抽出
                 const combinedText = (data.race_name || "") + " " + (data.course_info || "");
-                // ローマ数字（Ⅰ, Ⅱ, Ⅲ）に対応した正規表現
                 const gradeMatch = combinedText.match(/(G[1-3]|G[ⅠⅡⅢ]|Jpn[1-3]|Jpn[ⅠⅡⅢ]|L|OP|オープン|[1-3]勝クラス|未勝利|新馬)/i);
-                
                 if (gradeMatch) {
-                    extractedGrade = gradeMatch[1].toUpperCase() + " ";
+                    finalGrade = gradeMatch[1].toUpperCase() + " ";
                 }
             }
+
             const headcountStr = `${currentHorses.length}頭`;
             const gradeEl = document.getElementById('raceGrade');
             if (gradeEl) {
-                gradeEl.value = `${extractedGrade}${headcountStr}`.trim();
+                // グレード情報 + " " + 頭数 (例: "G1 18頭")
+                gradeEl.value = `${finalGrade}${headcountStr}`.trim();
             }
             
             lastFetchedUrl = url;

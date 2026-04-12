@@ -100,20 +100,21 @@ class handler(BaseHTTPRequestHandler):
             course_info = re.sub(r'^[0-9]+:[0-9]+\s*発走\s*/\s*', '', t).split('特集')[0].strip()
 
         grade_info = ""
-        # 1. 属性部分一致でグレードアイコンを確実に捕捉 (Icon_GradeType1, 2, 3...)
+        # 1. 属性部分一致でグレードアイコンを確実に捕捉 (PC版等)
         grade_icon = soup.select_one('span[class*="Icon_GradeType"]')
         if grade_icon:
             grade_info = grade_icon.get_text().strip().replace('GⅠ', 'G1').replace('GⅡ', 'G2').replace('GⅢ', 'G3')
         
-        # 2. アイコンや特定の場所に見当たらない場合、ページ全体のテキストから抽出を試みる
+        # 2. 見当たらない場合、HTMLソース全体から検索 (スマホ版・クラス名依存対策)
         if not grade_info:
-            page_text = soup.get_text()
-            # ローマ数字（Ⅰ, Ⅱ, Ⅲ）に対応した検索
-            grade_match = re.search(r'(G[1-3]|G[ⅠⅡⅢ]|Jpn[1-3]|Jpn[ⅠⅡⅢ]|L|オープン|OP|[1-3]勝クラス|未勝利|新馬)', page_text, re.IGNORECASE)
+            html_str = str(soup)
+            grade_match = re.search(r'(G[1-3]|G[ⅠⅡⅢ]|Jpn[1-3]|Jpn[ⅠⅡⅢ]|L|オープン|OP|[1-3]勝クラス|未勝利|新馬)', html_str, re.IGNORECASE)
             if grade_match:
-                grade_info = grade_match.group(1).replace('オープン', 'OP').upper()
-            else:
-                grade_info = ""
+                extracted = grade_match.group(1).upper()
+                # ローマ数字変換
+                grade_info = extracted.replace('GⅠ', 'G1').replace('GⅡ', 'G2').replace('GⅢ', 'G3').replace('オープン', 'OP')
+        
+        if not grade_info: grade_info = ""
         
         if not grade_info: grade_info = "一般"
 
