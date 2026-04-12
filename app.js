@@ -172,24 +172,29 @@ document.addEventListener('DOMContentLoaded', () => {
             currentHorses = data.horses.sort((a,b) => a.umaban - b.umaban);
             isGradeRace = data.race_name ? data.race_name.includes('G1') || data.race_name.includes('G2') || data.race_name.includes('G3') : false;
             
-            // ▼ 復元・強化: グレードと頭数を「合体」させて表示
-            let finalGrade = "";
-            if (data.grade_info && data.grade_info !== "一般" && data.grade_info.trim() !== "") {
-                finalGrade = data.grade_info.trim() + " ";
-            } else if (data.race_name || data.course_info) {
-                // レース名やコース詳細からのフォールバック抽出
-                const combinedText = (data.race_name || "") + " " + (data.course_info || "");
-                const gradeMatch = combinedText.match(/(G[1-3]|G[ⅠⅡⅢ]|Jpn[1-3]|Jpn[ⅠⅡⅢ]|L|OP|オープン|[1-3]勝クラス|未勝利|新馬)/i);
-                if (gradeMatch) {
-                    finalGrade = gradeMatch[1].toUpperCase() + " ";
-                }
+            // ▼ 刷新: ブルートフォース・サーチ (JSONデータ全体からグレードを総当たり検索)
+            const rawJsonString = JSON.stringify(data);
+            let foundGrade = "";
+            
+            // ローマ数字・全角・条件戦を全て網羅した最強の正規表現
+            const gradeRegex = /(G[1-3]|G[ⅠⅡⅢ]|Jpn[1-3]|Jpn[ⅠⅡⅢ]|L|OP|オープン|[1-3]勝クラス|未勝利|新馬)/i;
+            const gradeMatch = rawJsonString.match(gradeRegex);
+            
+            if (gradeMatch) {
+                // 見つかった場合、フォーマットを整える（例: "1勝クラス "）
+                foundGrade = gradeMatch[1].toUpperCase() + " ";
             }
-
+            
+            // 頭数を計算
             const headcountStr = `${currentHorses.length}頭`;
-            const gradeEl = document.getElementById('raceGrade');
-            if (gradeEl) {
-                // グレード情報 + " " + 頭数 (例: "G1 18頭")
-                gradeEl.value = `${finalGrade}${headcountStr}`.trim();
+            
+            // UIの入力欄に「合体」させて確実にセット
+            const targetElement = document.getElementById('raceGrade');
+            if (targetElement) {
+                // 既存の値を無視して、完全な文字列（例: "1勝クラス 16頭"）で上書き
+                targetElement.value = `${foundGrade}${headcountStr}`.trim();
+            } else {
+                console.error("エラー: 'raceGrade' のIDを持つinput要素が見つかりません。");
             }
             
             lastFetchedUrl = url;
