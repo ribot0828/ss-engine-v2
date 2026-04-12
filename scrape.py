@@ -105,25 +105,13 @@ class handler(BaseHTTPRequestHandler):
         if grade_icon:
             grade_info = grade_icon.get_text().strip().replace('GⅠ', 'G1').replace('GⅡ', 'G2').replace('GⅢ', 'G3')
         
-        # 2. アイコンがない場合、レース名やコース情報から詳しく判定
+        # 2. アイコンや特定の場所に見当たらない場合、ページ全体のテキストから抽出を試みる
         if not grade_info:
-            look_text = race_name + " " + course_info
-            # 地方Jpn表示やリステッド、オープンなどを順次検索
-            patterns = [
-                (r'G[1-3]', None),
-                (r'GⅠ|GⅡ|GⅢ', lambda m: m.replace('GⅠ','G1').replace('GⅡ','G2').replace('GⅢ','G3')),
-                (r'Jpn[1-3]', None),
-                (r'\(L\)', lambda m: "L"),
-                (r'(オープン|OP)', lambda m: "OP"),
-                (r'([1-3]勝クラス)', None),
-                (r'(新馬|未勝利)', None)
-            ]
-            for p, converter in patterns:
-                m = re.search(p, look_text, re.IGNORECASE)
-                if m:
-                    res = m.group(0)
-                    grade_info = converter(res) if converter else res
-                    break
+            page_text = soup.get_text()
+            # 重賞、オープン、条件戦、未勝利、新馬を広域検索
+            grade_match = re.search(r'(G[1-3]|Jpn[1-3]|L|オープン|OP|[1-3]勝クラス|未勝利|新馬)', page_text, re.IGNORECASE)
+            if grade_match:
+                grade_info = grade_match.group(1).replace('オープン', 'OP')
         
         if not grade_info: grade_info = "一般"
 
