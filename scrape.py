@@ -100,23 +100,26 @@ class handler(BaseHTTPRequestHandler):
             course_info = re.sub(r'^[0-9]+:[0-9]+\s*発走\s*/\s*', '', t).split('特集')[0].strip()
 
         grade_info = ""
-        # 1. 属性部分一致でグレードアイコンを確実に捕捉 (PC版等)
-        grade_icon = soup.select_one('span[class*="Icon_GradeType"]')
+        # 1. 優先アプローチ: グレードアイコン要素を直接狙う (最も正確)
+        grade_icon = soup.find(class_=re.compile("Icon_GradeType"))
         if grade_icon:
-            grade_info = grade_icon.get_text().strip().replace('GⅠ', 'G1').replace('GⅡ', 'G2').replace('GⅢ', 'G3')
+            grade_info = grade_icon.get_text(strip=True)
         
-        # 2. 見当たらない場合、HTMLソース全体から検索 (スマホ版・クラス名依存対策)
+        # 2. セカンドアプローチ: アイコンが無い場合、レース条件ブロックに絞って検索 (ノイズ排除)
         if not grade_info:
-            html_str = str(soup)
-            grade_match = re.search(r'(G[1-3]|G[ⅠⅡⅢ]|Jpn[1-3]|Jpn[ⅠⅡⅢ]|L|オープン|OP|[1-3]勝クラス|未勝利|新馬)', html_str, re.IGNORECASE)
-            if grade_match:
-                extracted = grade_match.group(1).upper()
-                # ローマ数字変換
-                grade_info = extracted.replace('GⅠ', 'G1').replace('GⅡ', 'G2').replace('GⅢ', 'G3').replace('オープン', 'OP')
+            # netkeibaのレース条件が記載される主要ブロック
+            race_data_block = soup.find('div', class_='RaceData01') or soup.find('div', class_='RaceList_Item02')
+            if race_data_block:
+                block_text = race_data_block.get_text()
+                grade_match = re.search(r'(G[1-3]|G[ⅠⅡⅢ]|Jpn[1-3]|Jpn[ⅠⅡⅢ]|L|OP|オープン|[1-3]勝クラス|未勝利|新馬)', block_text, re.IGNORECASE)
+                if grade_match:
+                    grade_info = grade_match.group(1)
         
-        if not grade_info: grade_info = ""
-        
-        if not grade_info: grade_info = "一般"
+        # 3. フォーマット整形 (ローマ数字変換と大文字化)
+        if grade_info:
+            grade_info = grade_info.upper().replace('GⅠ', 'G1').replace('GⅡ', 'G2').replace('GⅢ', 'G3').replace('オープン', 'OP')
+        else:
+            grade_info = "一般"
 
         # 3. 馬リストの抽出
         horses = []
