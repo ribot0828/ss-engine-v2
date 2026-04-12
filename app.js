@@ -514,7 +514,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
-    // JRA Odds Batch Input Logic
+    // JRA Odds Batch Input Logic (Revised: Match by Horse Name)
     document.getElementById('applyJraOddsBtn').addEventListener('click', () => {
         const rawText = document.getElementById('jraOddsInput').value;
         if (!rawText) return;
@@ -523,19 +523,18 @@ document.addEventListener('DOMContentLoaded', () => {
         let count = 0;
 
         lines.forEach(line => {
-            // JRA形式: 枠番+馬番(例: 610) + 馬名 + 単勝オッズ + 複勝オッズ...
-            // "11アレナリア22.6" や "610キングスコール6.2" を想定
+            // (\d+) : 枠+馬番の数字の塊 (紐付けには使わない)
+            // ([^\d\.\s]+) : 馬名 (数字・ドット・空白以外の文字列)
+            // \s*(\d+\.\d+) : 単勝オッズ
             const match = line.match(/(\d+)([^\d\.\s]+)\s*(\d+\.\d+)/);
             
             if (match) {
-                const numPart = match[1]; // "610", "11" など
+                const namePart = match[2].trim(); // 馬名
                 const odds = parseFloat(match[3]); // 6.2 など
 
-                // 枠番と馬番が結合しているため、先頭1文字(枠番)を除外して馬番を取得
-                // 1桁の場合はそのまま使用
-                const umaban = numPart.length > 1 ? parseInt(numPart.slice(1)) : parseInt(numPart);
-
-                const horse = currentHorses.find(h => h.umaban === umaban);
+                // 馬名で完全一致検索を行う
+                const horse = currentHorses.find(h => h.name === namePart);
+                
                 if (horse && !isNaN(odds)) {
                     horse.odds = odds;
                     count++;
