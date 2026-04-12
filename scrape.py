@@ -108,10 +108,12 @@ class handler(BaseHTTPRequestHandler):
         # 2. アイコンや特定の場所に見当たらない場合、ページ全体のテキストから抽出を試みる
         if not grade_info:
             page_text = soup.get_text()
-            # 重賞、オープン、条件戦、未勝利、新馬を広域検索
-            grade_match = re.search(r'(G[1-3]|Jpn[1-3]|L|オープン|OP|[1-3]勝クラス|未勝利|新馬)', page_text, re.IGNORECASE)
+            # ローマ数字（Ⅰ, Ⅱ, Ⅲ）に対応した検索
+            grade_match = re.search(r'(G[1-3]|G[ⅠⅡⅢ]|Jpn[1-3]|Jpn[ⅠⅡⅢ]|L|オープン|OP|[1-3]勝クラス|未勝利|新馬)', page_text, re.IGNORECASE)
             if grade_match:
-                grade_info = grade_match.group(1).replace('オープン', 'OP')
+                grade_info = grade_match.group(1).replace('オープン', 'OP').upper()
+            else:
+                grade_info = ""
         
         if not grade_info: grade_info = "一般"
 
