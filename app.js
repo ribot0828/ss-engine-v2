@@ -514,7 +514,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
-    // JRA Odds Batch Input Logic (Revised: Match by Horse Name)
+    // JRA Odds Batch Input Logic (Revised: Forgiving Matching)
     document.getElementById('applyJraOddsBtn').addEventListener('click', () => {
         const rawText = document.getElementById('jraOddsInput').value;
         if (!rawText) return;
@@ -523,21 +523,31 @@ document.addEventListener('DOMContentLoaded', () => {
         let count = 0;
 
         lines.forEach(line => {
-            // (\d+) : 枠+馬番の数字の塊 (紐付けには使わない)
-            // ([^\d\.\s]+) : 馬名 (数字・ドット・空白以外の文字列)
+            // (\d+) : 枠+馬番の数字の塊
+            // ([^\d\.\s]+) : 馬名
             // \s*(\d+\.\d+) : 単勝オッズ
             const match = line.match(/(\d+)([^\d\.\s]+)\s*(\d+\.\d+)/);
             
             if (match) {
-                const namePart = match[2].trim(); // 馬名
-                const odds = parseFloat(match[3]); // 6.2 など
+                const namePart = match[2].trim(); // JRA側の馬名
+                const odds = parseFloat(match[3]); // オッズ
 
-                // 馬名で完全一致検索を行う
-                const horse = currentHorses.find(h => h.name === namePart);
+                // 寛容な紐付けロジック
+                const horse = currentHorses.find(h => {
+                    // アプリ内のプロパティ名がどれであっても対応できるように網羅
+                    const hName = String(h.name || h.umaName || h.horseName || h['馬名'] || h.馬名 || '').trim();
+                    if (!hName) return false;
+
+                    // 双方向の部分一致で記号などの揺れを吸収
+                    return hName.includes(namePart) || namePart.includes(hName);
+                });
                 
                 if (horse && !isNaN(odds)) {
                     horse.odds = odds;
                     count++;
+                } else {
+                    // 紐付け失敗時はデバッグ用にコンソール出力
+                    console.log(`照合失敗: 抽出名=[${namePart}], オッズ=[${odds}]`);
                 }
             }
         });
@@ -546,7 +556,7 @@ document.addEventListener('DOMContentLoaded', () => {
             renderTable(); // 画面を更新し、手動入力のinput欄にも数値を反映させる
             alert(`${count}頭のオッズを反映しました。手動での微調整も可能です。`);
         } else {
-            alert("有効なオッズデータが見つかりませんでした。テキストの形式を確認してください。");
+            alert("オッズの抽出はできましたが、システム内の馬名と一致しませんでした。[F12]キーを押してConsoleタブのエラーを確認してください。");
         }
     });
 
