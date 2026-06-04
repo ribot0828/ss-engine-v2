@@ -6,7 +6,7 @@ const SCORE_MAP = {
 
 // 小数点第3位以下切り捨て (厳密な生データ比較を維持)
 function truncateTo3(val) {
-    return Math.floor(val * 1000) / 1000;
+    return Math.floor(val * 1000 + 1e-9) / 1000;
 }
 
 export function analyzeRace(horses, isGradeRace = false) {
@@ -126,17 +126,17 @@ export function analyzeRace(horses, isGradeRace = false) {
     });
 
     // 5. 投資プロトコル計算
-    // ① 単勝 (Striker)
-    const strikerPrio = ['X', 'B1', 'D1', 'B2', 'B3', 'A2', 'B0+'];
+    // ① 単勝 (WIN) - Kelly基準に基づく安定型序列（A・B評価重視）
+    const WIN_PRIORITY = ['A2', 'B1', 'B3', 'B2', 'D1', 'X', 'B0+'];
     const strikerWallFilter = (h) => {
         if (h.umaban >= 13 && (h.cls === 'A1' || h.cls === 'S2' || h.cls === 'A0')) return false;
         return true;
     };
     
     let strikerCandidates = [];
-    for (const pCls of strikerPrio) {
+    for (const pCls of WIN_PRIORITY) {
         let matching = horses.filter(h => h.cls === pCls && strikerWallFilter(h));
-        matching.sort(sortAttack); // Striker generally sorted by attack logic, even B0+? Buffer says B0+ is defense, but for Win we use B0+ as last.
+        matching.sort(sortAttack);
         strikerCandidates.push(...matching);
     }
     
@@ -189,9 +189,10 @@ export function analyzeRace(horses, isGradeRace = false) {
         // S系優先（S0,S1,S2はすでにdefPrioの最初にあるのでOK）
         row2Def = row2Def.slice(0, 2);
 
-        const atkPrio = ['B1', 'B2', 'X', 'D1', 'B3', 'A2'];
+        // 三連複2列目（攻撃枠）- 波乱狙いの攻撃型序列（X・D重視、単勝とは独立）
+        const TRIO_ATTACK_PRIORITY = ['B1', 'B2', 'X', 'D1', 'B3', 'A2'];
         let row2Atk = [];
-        for (const pCls of atkPrio) {
+        for (const pCls of TRIO_ATTACK_PRIORITY) {
             let matching = horses.filter(h => h.cls === pCls && h.umaban !== axisHorse.umaban);
             matching.sort(sortAttack);
             row2Atk.push(...matching);
@@ -214,7 +215,7 @@ export function analyzeRace(horses, isGradeRace = false) {
         // All S rank
         addRow3(horses.filter(h => h.rank === 'S'));
         // All Strikers
-        addRow3(horses.filter(h => atkPrio.includes(h.cls)));
+        addRow3(horses.filter(h => TRIO_ATTACK_PRIORITY.includes(h.cls)));
         // Remaining
         let remC0 = horses.filter(h => h.cls === 'C0');
         remC0.sort(sortDefense);
@@ -239,7 +240,7 @@ export function analyzeRace(horses, isGradeRace = false) {
         r3Add(h => sanrenpuku.row2.some(r2 => r2.umaban === h.umaban));
         r3Add(h => h.rank === 'S');
         
-        for(let c of atkPrio) { r3Add(h => h.cls === c); }
+        for(let c of TRIO_ATTACK_PRIORITY) { r3Add(h => h.cls === c); }
         r3Add(h => h.cls === 'C0');
         remN.forEach(h => {
              if (row3Set.has(h.umaban) && !finalRow3.some(f => f.umaban === h.umaban)) finalRow3.push(h);
