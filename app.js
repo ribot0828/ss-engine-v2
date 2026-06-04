@@ -278,6 +278,11 @@ document.addEventListener('DOMContentLoaded', () => {
                         ${['S','A','B','C','D','E','F'].map(r => `<option value="${r}" ${horse.rank === r ? 'selected' : ''}>${r}</option>`).join('')}
                     </select>
                 </td>
+                <td class="px-4 py-2 border-b border-slate-700 text-center">
+                    <label class="flex items-center justify-center cursor-pointer">
+                        <input type="checkbox" class="audit-checkbox w-4 h-4 text-blue-600 bg-slate-800 border-slate-600 rounded" data-idx="${idx}" ${horse.passedStrikerValidation ? 'checked' : ''}>
+                    </label>
+                </td>
             `;
             raceTableBody.appendChild(tr);
         });
@@ -294,6 +299,13 @@ document.addEventListener('DOMContentLoaded', () => {
             el.addEventListener('change', (e) => {
                 const idx = parseInt(e.target.dataset.idx);
                 currentHorses[idx].rank = e.target.value;
+            });
+        });
+        
+        document.querySelectorAll('.audit-checkbox').forEach(el => {
+            el.addEventListener('change', (e) => {
+                const idx = parseInt(e.target.dataset.idx);
+                currentHorses[idx].passedStrikerValidation = e.target.checked;
             });
         });
         
@@ -455,7 +467,9 @@ document.addEventListener('DOMContentLoaded', () => {
             // 確定オッズベースで最終解析を実行
             let tempHorses = JSON.parse(JSON.stringify(currentHorses));
             tempHorses.forEach(h => {
-                 if (h.finalOdds && h.finalOdds > 0) h.odds = h.finalOdds;
+                 if (h.finalOdds !== undefined) {
+                     h.odds = parseFloat(h.finalOdds) || 0;
+                 }
             });
             const tempRes = analyzeRace(tempHorses, isGradeRace);
             

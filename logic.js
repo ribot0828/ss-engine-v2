@@ -130,6 +130,13 @@ export function analyzeRace(horses, isGradeRace = false) {
     const WIN_PRIORITY = ['A2', 'B1', 'B3', 'B2', 'D1', 'X', 'B0+'];
     const strikerWallFilter = (h) => {
         if (h.umaban >= 13 && (h.cls === 'A1' || h.cls === 'S2' || h.cls === 'A0')) return false;
+        
+        // フェーズ4.5: 近走監査 (Striker Validation)
+        // X, D1 は手動チェックがONの場合のみ単勝対象とする
+        if (h.cls === 'X' || h.cls === 'D1') {
+            if (!h.passedStrikerValidation) return false;
+        }
+        
         return true;
     };
     
