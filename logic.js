@@ -208,50 +208,48 @@ export function analyzeRace(horses, isGradeRace = false) {
 
         sanrenpuku.row2 = [...row2Def, ...row2Atk];
 
-        // 3rd line
-        let row3Set = new Set(sanrenpuku.row2.map(h => h.umaban));
-        
-        let addRow3 = (hList) => {
+        // 3rd line - 最適化済み抽出ロジック
+        let finalRow3 = [];
+        const r3Used = new Set();
+
+        // 重複・軸馬を除外しつつ追加するヘルパー
+        const addToRow3 = (hList) => {
             for (const h of hList) {
-                if (h.umaban !== axisHorse.umaban && !row3Set.has(h.umaban)) {
-                    row3Set.add(h.umaban);
+                if (h.umaban !== axisHorse.umaban && !r3Used.has(h.umaban)) {
+                    r3Used.add(h.umaban);
+                    finalRow3.push(h);
                 }
             }
         };
 
-        // All S rank
-        addRow3(horses.filter(h => h.rank === 'S'));
-        // All Strikers
-        addRow3(horses.filter(h => TRIO_ATTACK_PRIORITY.includes(h.cls)));
-        // Remaining
-        let remC0 = horses.filter(h => h.cls === 'C0');
-        remC0.sort(sortDefense);
-        addRow3(remC0);
-        
-        let remN = horses.filter(h => !row3Set.has(h.umaban) && h.umaban !== axisHorse.umaban);
-        remN.sort(sortN);
-        addRow3(remN);
+        // 1. 2列目（row2）に選ばれた全馬（そのまま追加）
+        addToRow3(sanrenpuku.row2);
 
-        let row3Arr = Array.from(row3Set).map(uma => horses.find(h => h.umaban === uma));
-        
-        // 厳密には序列順に並べる。「2列目全馬、S全馬、Striker全馬、C0、N...」の順番。
-        // 上記addRow3順で追加しているのでSetから配列化すれば元の意図に近いが順序を厳密化。
-        let finalRow3 = [];
-        let r3Add = (cond) => {
-            horses.filter(cond).forEach(h => {
-                if (row3Set.has(h.umaban) && !finalRow3.some(f => f.umaban === h.umaban)) {
-                    finalRow3.push(h);
-                }
-            });
-        };
-        r3Add(h => sanrenpuku.row2.some(r2 => r2.umaban === h.umaban));
-        r3Add(h => h.rank === 'S');
-        
-        for(let c of TRIO_ATTACK_PRIORITY) { r3Add(h => h.cls === c); }
-        r3Add(h => h.cls === 'C0');
-        remN.forEach(h => {
-             if (row3Set.has(h.umaban) && !finalRow3.some(f => f.umaban === h.umaban)) finalRow3.push(h);
-        });
+        // 2. 評価が 'S' の全馬（sortDefense）
+        let sRanked = horses.filter(h => h.rank === 'S');
+        sRanked.sort(sortDefense);
+        addToRow3(sRanked);
+
+        // 3. 防御系クラスの残り馬（'A0', 'B0+', 'A1', 'B0'）（sortDefense）
+        const defenseRemClasses = new Set(['A0', 'B0+', 'A1', 'B0']);
+        let defenseRem = horses.filter(h => defenseRemClasses.has(h.cls));
+        defenseRem.sort(sortDefense);
+        addToRow3(defenseRem);
+
+        // 4. 攻撃枠（TRIO_ATTACK_PRIORITY のクラス）の全馬（sortAttack）
+        let atkAll = horses.filter(h => TRIO_ATTACK_PRIORITY.includes(h.cls));
+        atkAll.sort(sortAttack);
+        addToRow3(atkAll);
+
+        // 5. 'C0' クラスの馬（sortDefense）
+        let c0Horses = horses.filter(h => h.cls === 'C0');
+        c0Horses.sort(sortDefense);
+        addToRow3(c0Horses);
+
+        // 6. 残りの 'N' クラスの馬（sortN）
+        let remN = horses.filter(h => !r3Used.has(h.umaban) && h.umaban !== axisHorse.umaban);
+        remN.sort(sortN);
+        addToRow3(remN);
 
         sanrenpuku.row3 = finalRow3.slice(0, 10);
     }
