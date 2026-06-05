@@ -522,7 +522,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const sanrenPay = getPay('3連複');
 
         let csvContent = '\uFEFF';
-        csvContent += "日付,レース名,コース詳細,グレード・頭数,馬番,馬名,購入時人気,購入時オッズ,評価,購入時期待値,購入時クラス,最終確定人気,最終確定オッズ,最終確定期待値,最終確定クラス,着順,MAO,実行フラグ,単勝払戻,ワイド払戻,三連複払戻\r\n";
+        csvContent += "日付,レース名,コース詳細,グレード・頭数,馬番,馬名,購入時人気,購入時オッズ,評価,購入時期待値,購入時クラス,近走監査,最終確定人気,最終確定オッズ,最終確定期待値,最終確定クラス,着順,MAO,実行フラグ,単勝払戻,ワイド払戻,三連複払戻\r\n";
 
         // ▼ 追加: CSVを破壊する文字（改行、カンマ）をスペースに置換する関数
         const sanitize = (val) => {
@@ -535,6 +535,8 @@ document.addEventListener('DOMContentLoaded', () => {
                  dateStr, raceName, courseInfo, gradeStr, h.umaban, h.name,
                  h.popular || "-", h.odds ? h.odds.toFixed(1) : "0.0",
                  h.rank, h.ev ? h.ev.toFixed(3) : "0.000", h.cls || "N",
+                 // 近走監査ステータス
+                 (h.cls === 'X' || h.cls === 'D1') ? (h.passedStrikerValidation ? "○" : "×") : "-",
                  h.finalPopular || "-",
                  (h.finalOdds && h.finalOdds > 0) ? h.finalOdds.toFixed(1) : "-",
                  (h.finalEv !== undefined && h.finalEv !== "-") ? h.finalEv.toFixed(3) : "-",
