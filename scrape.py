@@ -204,11 +204,8 @@ class handler(BaseHTTPRequestHandler):
                 tds = tr.select('td')
                 if len(tds) >= 2:
                     # 組み合わせの抽出 (tds[0])
-                    combo_html = str(tds[0])
-                    combo_html = re.sub(r'<br\s*/?>', '-', combo_html)
-                    combo_soup = BeautifulSoup(combo_html, 'html.parser')
-                    combo_text = combo_soup.get_text(separator='|')
-                    combos = [x.strip() for x in combo_text.split('|') if x.strip() and re.search(r'\d', x)]
+                    raw_nums = re.findall(r'\b\d+\b', tds[0].get_text(separator=' '))
+                    nums = [n for n in raw_nums if n.isdigit()]
                     
                     # 金額の抽出 (tds[1])
                     payout_html = str(tds[1])
@@ -221,10 +218,14 @@ class handler(BaseHTTPRequestHandler):
                         if clean_str:
                             amounts.append(int(clean_str))
                             
-                    # ペアの作成
+                    # ペアの作成（金額の件数で馬番を分割・ハイフン結合）
                     pairs = []
-                    for i in range(min(len(combos), len(amounts))):
-                        pairs.append({"combo": combos[i], "amount": amounts[i]})
+                    if amounts and nums:
+                        chunk_size = len(nums) // len(amounts)
+                        if chunk_size > 0:
+                            for i in range(len(amounts)):
+                                combo = "-".join(nums[i * chunk_size : (i + 1) * chunk_size])
+                                pairs.append({"combo": combo, "amount": amounts[i]})
                     
                     # 万が一パースできなかった場合のフォールバック
                     if not pairs and len(tds) >= 2:
