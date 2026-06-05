@@ -269,7 +269,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const tr = document.createElement('tr');
             tr.innerHTML = `
                 <td class="px-4 py-2 border-b border-slate-700 text-center">${horse.umaban}</td>
-                <td class="px-4 py-2 border-b border-slate-700 font-bold">${horse.name}</td>
+                <td class="px-4 py-2 border-b border-slate-700 horse-name font-bold">${horse.name}</td>
                 <td class="px-4 py-2 border-b border-slate-700 text-right">
                     <input type="number" step="0.1" class="bg-slate-800 text-white w-20 px-2 py-1 rounded odds-input border border-slate-600" data-idx="${idx}" value="${horse.odds}">
                 </td>
