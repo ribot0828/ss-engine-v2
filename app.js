@@ -513,16 +513,23 @@ document.addEventListener('DOMContentLoaded', () => {
 
         const getPay = (key) => {
             if (lastResultData && lastResultData.payouts && lastResultData.payouts[key]) {
-                return lastResultData.payouts[key].replace(/,/g, '').trim();
+                const arr = lastResultData.payouts[key];
+                if (Array.isArray(arr)) {
+                    return arr.map(item => `${item.combo}: ${item.amount}円`).join(' / ');
+                }
+                // 古い履歴データへの後方互換性（単一の文字列の場合）
+                return String(arr).replace(/円/g, "円 ").replace(/,/g, '').trim();
             }
             return "-";
         };
         const tanshoPay = getPay('単勝');
-        const widePay = getPay('ワイド').replace(/円/g, "円 ");
+        const widePay = getPay('ワイド');
+        const umarenPay = getPay('馬連');
         const sanrenPay = getPay('3連複');
+        const sanrentanPay = getPay('3連単');
 
         let csvContent = '\uFEFF';
-        csvContent += "日付,レース名,コース詳細,グレード・頭数,馬番,馬名,購入時人気,購入時オッズ,評価,購入時期待値,購入時クラス,近走監査,最終確定人気,最終確定オッズ,最終確定期待値,最終確定クラス,着順,MAO,実行フラグ,単勝払戻,ワイド払戻,三連複払戻\r\n";
+        csvContent += "日付,レース名,コース詳細,グレード・頭数,馬番,馬名,購入時人気,購入時オッズ,評価,購入時期待値,購入時クラス,近走監査,最終確定人気,最終確定オッズ,最終確定期待値,最終確定クラス,着順,MAO,実行フラグ,単勝払戻,ワイド払戻,馬連払戻,三連複払戻,三連単払戻\r\n";
 
         // ▼ 追加: CSVを破壊する文字（改行、カンマ）をスペースに置換する関数
         const sanitize = (val) => {
@@ -544,7 +551,7 @@ document.addEventListener('DOMContentLoaded', () => {
                  h.placing || "-",
                  (h.mao !== undefined && h.mao !== 999) ? h.mao.toFixed(1) : "-",
                  h.amberPassed ? "○" : "×",
-                 tanshoPay, widePay, sanrenPay
+                 tanshoPay, widePay, umarenPay, sanrenPay, sanrentanPay
              ];
              // ▼ 変更: 全要素をサニタイズしてからカンマ区切りにする
              const safeRow = rawRow.map(item => sanitize(item));
