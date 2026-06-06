@@ -12,6 +12,13 @@ function truncateTo3(val) {
 export function analyzeRace(horses, isGradeRace = false) {
     if (!horses || horses.length === 0) return null;
 
+    // フェールセーフ: odds / rank の欠損・型異常を補正
+    horses.forEach(h => {
+        if (h.odds === undefined || h.odds === null || isNaN(h.odds)) h.odds = 0;
+        else h.odds = parseFloat(h.odds) || 0;
+        if (!h.rank || !SCORE_MAP[h.rank]) h.rank = 'B';
+    });
+
     // 1. 各馬のスコアと予想勝率、期待値の計算
     let totalScore = 0;
     horses.forEach(h => {

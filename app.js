@@ -178,6 +178,13 @@ document.addEventListener('DOMContentLoaded', () => {
             currentRaceNum = data.race_num || "";
             
             currentHorses = data.horses.sort((a,b) => a.umaban - b.umaban);
+            
+            // フェールセーフ: odds と rank の型を保証
+            currentHorses.forEach(h => {
+                h.odds = parseFloat(h.odds) || 0;
+                if (!h.rank) h.rank = 'B';
+            });
+            
             isGradeRace = data.race_name ? data.race_name.includes('G1') || data.race_name.includes('G2') || data.race_name.includes('G3') : false;
             
             // ▼ 刷新: タイトル等から精査された正確なグレードと頭数を結合してUIへ同期
