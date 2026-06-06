@@ -145,7 +145,7 @@ table input:focus, table select:focus {
 
 /* Mobile: 馬名の改行崩れ防止 & テーブル横スクロール対応 */
 #raceTable {
-    min-width: 560px;
+    min-width: 340px;
 }
 
 #raceTable td.horse-name {

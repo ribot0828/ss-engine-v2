@@ -268,20 +268,18 @@ document.addEventListener('DOMContentLoaded', () => {
         currentHorses.forEach((horse, idx) => {
             const tr = document.createElement('tr');
             tr.innerHTML = `
-                <td class="px-4 py-2 border-b border-slate-700 text-center">${horse.umaban}</td>
-                <td class="px-4 py-2 border-b border-slate-700 horse-name font-bold">${horse.name}</td>
-                <td class="px-4 py-2 border-b border-slate-700 text-right">
-                    <input type="number" step="0.1" class="bg-slate-800 text-white w-20 px-2 py-1 rounded odds-input border border-slate-600" data-idx="${idx}" value="${horse.odds}">
-                </td>
-                <td class="px-4 py-2 border-b border-slate-700 text-center">
-                    <select class="bg-slate-800 text-white px-2 py-1 rounded rank-select border border-slate-600" data-idx="${idx}">
+                <td class="px-2 py-1 border-b border-slate-700 text-center text-sm">${horse.umaban}</td>
+                <td class="px-2 py-1 border-b border-slate-700 text-center">
+                    <select class="bg-slate-800 text-white px-1 py-1 rounded rank-select border border-slate-600 text-sm w-12" data-idx="${idx}">
                         ${['S','A','B','C','D','E','F'].map(r => `<option value="${r}" ${horse.rank === r ? 'selected' : ''}>${r}</option>`).join('')}
                     </select>
                 </td>
-                <td class="px-4 py-2 border-b border-slate-700 text-center">
-                    <label class="flex items-center justify-center cursor-pointer">
-                        <input type="checkbox" class="audit-checkbox w-4 h-4 text-blue-600 bg-slate-800 border-slate-600 rounded" data-idx="${idx}" ${horse.passedStrikerValidation ? 'checked' : ''}>
-                    </label>
+                <td class="px-2 py-1 border-b border-slate-700 horse-name font-bold text-sm">${horse.name}</td>
+                <td class="px-2 py-1 border-b border-slate-700 text-right">
+                    <input type="number" step="0.1" class="bg-slate-800 text-white w-16 px-1 py-1 rounded odds-input border border-slate-600 text-sm" data-idx="${idx}" value="${horse.odds}">
+                </td>
+                <td class="px-2 py-1 border-b border-slate-700 text-center">
+                    <input type="checkbox" class="audit-checkbox w-4 h-4 text-blue-600 bg-slate-800 border-slate-600 rounded" data-idx="${idx}" ${horse.passedStrikerValidation ? 'checked' : ''}>
                 </td>
             `;
             raceTableBody.appendChild(tr);
