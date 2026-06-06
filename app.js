@@ -384,9 +384,16 @@ document.addEventListener('DOMContentLoaded', () => {
         let sortedHorses = [...res.horses].sort((a,b)=> a.umaban - b.umaban);
         sortedHorses.forEach(h => {
             const tr = document.createElement('tr');
+            
+            // Phase 4.5: X/D1 で未監査の馬をハイライト
+            const needsAudit = (h.cls === 'X' || h.cls === 'D1') && !h.passedStrikerValidation;
+            if (needsAudit) {
+                tr.classList.add('audit-alert');
+            }
+            
             tr.innerHTML = `
                 <td class="px-2 py-1 border-b border-slate-700">${h.umaban}</td>
-                <td class="px-2 py-1 border-b border-slate-700">${h.cls || '-'}</td>
+                <td class="px-2 py-1 border-b border-slate-700">${h.cls || '-'}${needsAudit ? ' ⚠️' : ''}</td>
                 <td class="px-2 py-1 border-b border-slate-700">${h.ev.toFixed(3)}</td>
                 <td class="px-2 py-1 border-b border-slate-700">${(h.winRate*100).toFixed(1)}%</td>
                 <td class="px-2 py-1 border-b border-slate-700">${h.mao === 999 ? '-' : h.mao.toFixed(1)}</td>

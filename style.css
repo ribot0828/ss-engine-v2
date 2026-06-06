@@ -155,3 +155,9 @@ table input:focus, table select:focus {
 #maoTable {
     min-width: 480px;
 }
+
+/* Phase 4.5: 要監査馬（X/D1 未チェック）のハイライト */
+.audit-alert {
+    background: rgba(251, 191, 36, 0.15) !important;
+    border-left: 3px solid #f59e0b;
+}
