@@ -52,6 +52,7 @@ export function analyzeRace(horses, isGradeRace = false) {
         else if (rank === 'B' && ev >= 1.500 && ev <= 1.999) h.cls = 'B2'; // < 2.000 is <=1.999
         else if (rank === 'B' && ev >= 1.100 && ev <= 1.350) h.cls = 'B1';
         else if (rank === 'B' && ev >= 2.000 && ev <= 4.500) h.cls = 'B3';
+        else if (rank === 'A' && ev >= 1.500 && ev <= 1.999) h.cls = 'A3'; // A3新設
         else if (rank === 'A' && ev >= 1.000 && ev <= 1.250) h.cls = 'A2';
         else if (rank === 'D' && ev >= 1.300 && ev <= 1.999) h.cls = 'D1';
         else h.cls = 'N';
@@ -90,16 +91,15 @@ export function analyzeRace(horses, isGradeRace = false) {
     const sortAttack = (a, b) => {
         if (a.ev !== b.ev) {
             if (Math.abs(a.ev - b.ev) <= 0.100) {
-                return b.umaban - a.umaban; // 馬番大きい方優先
+                return a.umaban - b.umaban; // 馬番小さい順（内枠優先）
             }
-            return a.ev - b.ev; // EV低い方
+            return a.ev - b.ev; // EV低い順（昇順）
         }
-        return b.umaban - a.umaban;
+        return a.umaban - b.umaban;
     };
 
     const sortDefense = (a, b) => {
-        if (a.umaban !== b.umaban) return a.umaban - b.umaban; // 内枠優先
-        return a.ev - b.ev;
+        return a.ev - b.ev; // 例外排除、EV低い順（昇順）のみ
     };
     
     const sortN = (a, b) => {
@@ -109,7 +109,7 @@ export function analyzeRace(horses, isGradeRace = false) {
 
     // 4. MAO計算
     const defenseClasses = new Set(['S0', 'S1', 'S2', 'B0+', 'A0', 'B0', 'A1', 'C0']);
-    const attackClasses1 = new Set(['B1', 'B2', 'B3', 'A2']); // Buffer 1.2
+    const attackClasses1 = new Set(['A3', 'B1', 'B2', 'B3', 'A2']); // Buffer 1.2
     const attackClassesX = new Set(['X']); // 3.0, Buffer 1.0
     const attackClassesD1 = new Set(['D1']); // 1.0, Buffer 1.0
 
@@ -134,7 +134,7 @@ export function analyzeRace(horses, isGradeRace = false) {
 
     // 5. 投資プロトコル計算
     // ① 単勝 (WIN) - Kelly基準に基づく安定型序列（A・B評価重視）
-    const WIN_PRIORITY = ['A2', 'B1', 'B3', 'B2', 'D1', 'X', 'B0+'];
+    const WIN_PRIORITY = ['A3', 'A2', 'B1', 'B3', 'B2', 'D1', 'X', 'B0+'];
     const strikerWallFilter = (h) => {
         if (h.umaban >= 13 && (h.cls === 'A1' || h.cls === 'S2' || h.cls === 'A0')) return false;
         
@@ -163,8 +163,8 @@ export function analyzeRace(horses, isGradeRace = false) {
     let sanrenpuku = { axis: null, row2: [], row3: [] };
 
     if (hasAxis && !skipReason) {
-        // Axis selection: S0 > S1 > S2 > A0 > B0+ > A1 > C0
-        const axisPrio = ['S0', 'S1', 'S2', 'A0', 'B0+', 'A1', 'C0'];
+        // Axis selection
+        const axisPrio = ['S0', 'S1', 'S2', 'A0', 'B0+', 'A1', 'B0', 'C0'];
         let axisHorse = null;
         for (const pCls of axisPrio) {
             let matching = horses.filter(h => h.cls === pCls);
@@ -192,7 +192,7 @@ export function analyzeRace(horses, isGradeRace = false) {
 
         // ③ 三連複
         // 2nd line
-        const defPrio = ['S0', 'S1', 'S2', 'A0', 'A1', 'B0+']; 
+        const defPrio = ['S0', 'S1', 'S2', 'A0', 'B0+', 'A1', 'B0']; 
         let row2Def = [];
         for (const pCls of defPrio) {
             let matching = horses.filter(h => h.cls === pCls && h.umaban !== axisHorse.umaban);
@@ -204,7 +204,7 @@ export function analyzeRace(horses, isGradeRace = false) {
         row2Def = row2Def.slice(0, 2);
 
         // 三連複2列目（攻撃枠）- 波乱狙いの攻撃型序列（X・D重視、単勝とは独立）
-        const TRIO_ATTACK_PRIORITY = ['B1', 'B2', 'X', 'D1', 'B3', 'A2'];
+        const TRIO_ATTACK_PRIORITY = ['A3', 'B1', 'B2', 'X', 'D1', 'B3', 'A2'];
         let row2Atk = [];
         for (const pCls of TRIO_ATTACK_PRIORITY) {
             let matching = horses.filter(h => h.cls === pCls && h.umaban !== axisHorse.umaban);
