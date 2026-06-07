@@ -200,7 +200,7 @@ export function analyzeRace(horses, isGradeRace = false) {
         }
         
         // S系優先（S0,S1,S2はすでにdefPrioの最初にあるのでOK）
-        row2Def = row2Def.slice(0, 3); // 最大3頭
+        row2Def = row2Def.slice(0, 2); // 最大2頭
 
         // 三連複2列目（攻撃枠）- 波乱狙いの攻撃型序列（X・D重視、単勝とは独立）
         const TRIO_ATTACK_PRIORITY = ['A3', 'B1', 'B2', 'X', 'D1', 'B3', 'A2'];
@@ -210,7 +210,7 @@ export function analyzeRace(horses, isGradeRace = false) {
             matching.sort(sortAttack);
             row2Atk.push(...matching);
         }
-        row2Atk = row2Atk.slice(0, 2); // 最大2頭
+        row2Atk = row2Atk.slice(0, 1); // 最大1頭
 
         sanrenpuku.row2 = [...row2Def, ...row2Atk];
 
