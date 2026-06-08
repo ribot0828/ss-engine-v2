@@ -155,6 +155,13 @@ export function analyzeRace(horses, isGradeRace = false) {
     
     // MAO Passed only
     const winTargets = strikerCandidates.filter(h => h.amberPassed).slice(0, 2);
+    
+    // ユニット配分（Ver.5.29）
+    winTargets.forEach(h => {
+        if (h.cls === 'A3') h.unit = 3;
+        else if (h.cls === 'B2') h.unit = 2;
+        else h.unit = 1;
+    });
 
     // ② ワイド (Insurance) 
     // ユーザ指定により軸不在時は単勝のみ
@@ -176,18 +183,8 @@ export function analyzeRace(horses, isGradeRace = false) {
 
         sanrenpuku.axis = axisHorse;
 
-        // Wide candidates:
-        let wideOpponents = [...winTargets];
-        if (wideOpponents.length === 0) {
-            // 単勝不在または不的中リスク => C0優先採用
-            let c0s = horses.filter(h => h.cls === 'C0');
-            c0s.sort(sortDefense);
-            if (c0s.length > 0) wideOpponents.push(c0s[0]);
-        }
-
-        wideOpponents.slice(0, 2).forEach(opp => {
-            wideTargets.push({ axis: axisHorse, opp: opp });
-        });
+        // Wide candidates: Ver.5.29にてワイド生成は無効化（オフ）
+        let wideOpponents = [];
 
         // ③ 三連複
         // 2nd line
@@ -202,8 +199,8 @@ export function analyzeRace(horses, isGradeRace = false) {
         // S系優先（S0,S1,S2はすでにdefPrioの最初にあるのでOK）
         row2Def = row2Def.slice(0, 2); // 最大2頭
 
-        // 三連複2列目（攻撃枠）- 波乱狙いの攻撃型序列（X・D重視、単勝とは独立）
-        const TRIO_ATTACK_PRIORITY = ['A3', 'B1', 'B2', 'X', 'D1', 'B3', 'A2'];
+        // 三連複2列目（攻撃枠）- Win-Core優先順位同期（Ver.5.29）
+        const TRIO_ATTACK_PRIORITY = ['A3', 'B2', 'A2', 'B1', 'D1', 'B3', 'X'];
         let row2Atk = [];
         for (const pCls of TRIO_ATTACK_PRIORITY) {
             let matching = horses.filter(h => h.cls === pCls && h.umaban !== axisHorse.umaban);
@@ -231,8 +228,8 @@ export function analyzeRace(horses, isGradeRace = false) {
         // 1. 2列目（row2）に選ばれた全馬（そのまま追加）
         addToRow3(sanrenpuku.row2);
 
-        // 2. 評価が 'S' の全馬（sortDefense）
-        let sRanked = horses.filter(h => h.rank === 'S');
+        // 2. 評価Sの全馬（ただしNクラスは除外 / sortDefense）
+        let sRanked = horses.filter(h => h.rank === 'S' && h.cls !== 'N');
         sRanked.sort(sortDefense);
         addToRow3(sRanked);
 
@@ -242,15 +239,12 @@ export function analyzeRace(horses, isGradeRace = false) {
         defenseRem.sort(sortDefense);
         addToRow3(defenseRem);
 
-        // 4. Win-Core系の全馬（sortAttack）
+        // 3. Win-Core系の全馬（sortAttack）
         let atkAll = horses.filter(h => TRIO_ATTACK_PRIORITY.includes(h.cls));
         atkAll.sort(sortAttack);
         addToRow3(atkAll);
 
-        // 5. 残りの 'N' クラスの馬（sortN: 勝率順 → 馬番大優先）
-        let nAll = horses.filter(h => h.cls === 'N' || !h.cls);
-        nAll.sort(sortN);
-        addToRow3(nAll);
+        // ※絶対ルール※ Nクラスは一切含めない（完全排除）
 
         sanrenpuku.row3 = finalRow3.slice(0, 10);
     }

@@ -1,4 +1,4 @@
-import { analyzeRace } from './logic.js';
+import { analyzeRace } from './logic.js?v=5.29.1';
 
 document.addEventListener('DOMContentLoaded', () => {
     const fetchBtn = document.getElementById('fetchBtn');
