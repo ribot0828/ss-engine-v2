@@ -345,20 +345,13 @@ document.addEventListener('DOMContentLoaded', () => {
             winList.innerHTML = `<li class="text-slate-400">対象馬なし</li>`;
         } else {
             res.winTargets.forEach(h => {
-                winList.innerHTML += `<li class="font-bold text-yellow-300">馬番 ${h.umaban} [${h.cls}] : 期待値 ${h.ev.toFixed(3)} ${h.amberPassed ? "✅" : "❌"} (MAO: ${h.mao.toFixed(1)})</li>`;
+                winList.innerHTML += `<li class="font-bold text-yellow-300">馬番 ${h.umaban} [${h.cls}] : 推奨 ${h.unit}U / 期待値 ${h.ev.toFixed(3)} ${h.amberPassed ? "✅" : "❌"} (MAO: ${h.mao.toFixed(1)})</li>`;
             });
         }
 
         // 3. Wide Targets
         const wideList = document.getElementById('wideTargets');
-        wideList.innerHTML = "";
-        if (res.skipReason || res.wideTargets.length === 0) {
-            wideList.innerHTML = `<li class="text-slate-400">購入見送り (単勝のみ執行)</li>`;
-        } else {
-            res.wideTargets.forEach(w => {
-                 wideList.innerHTML += `<li>軸: ${w.axis.umaban} [${w.axis.cls}] - 相手: ${w.opp.umaban} [${w.opp.cls}]</li>`;
-            });
-        }
+        wideList.innerHTML = `<li class="text-slate-400">Ver.5.29により無効化 (単勝・三連複特化)</li>`;
 
         // 4. Sanrenpuku
         const sanList = document.getElementById('sanrenpukuTargets');
