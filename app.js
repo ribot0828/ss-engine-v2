@@ -1,4 +1,4 @@
-import { analyzeRace } from './logic.js';
+import { analyzeRace } from './logic.js?v=5.30.0';
 
 document.addEventListener('DOMContentLoaded', () => {
     const fetchBtn = document.getElementById('fetchBtn');
@@ -178,6 +178,13 @@ document.addEventListener('DOMContentLoaded', () => {
             currentRaceNum = data.race_num || "";
             
             currentHorses = data.horses.sort((a,b) => a.umaban - b.umaban);
+            
+            // フェールセーフ: odds と rank の型を保証
+            currentHorses.forEach(h => {
+                h.odds = parseFloat(h.odds) || 0;
+                if (!h.rank) h.rank = 'B';
+            });
+            
             isGradeRace = data.race_name ? data.race_name.includes('G1') || data.race_name.includes('G2') || data.race_name.includes('G3') : false;
             
             // ▼ 刷新: タイトル等から精査された正確なグレードと頭数を結合してUIへ同期
@@ -268,15 +275,18 @@ document.addEventListener('DOMContentLoaded', () => {
         currentHorses.forEach((horse, idx) => {
             const tr = document.createElement('tr');
             tr.innerHTML = `
-                <td class="px-4 py-2 border-b border-slate-700 text-center">${horse.umaban}</td>
-                <td class="px-4 py-2 border-b border-slate-700 font-bold">${horse.name}</td>
-                <td class="px-4 py-2 border-b border-slate-700 text-right">
-                    <input type="number" step="0.1" class="bg-slate-800 text-white w-20 px-2 py-1 rounded odds-input border border-slate-600" data-idx="${idx}" value="${horse.odds}">
-                </td>
-                <td class="px-4 py-2 border-b border-slate-700 text-center">
-                    <select class="bg-slate-800 text-white px-2 py-1 rounded rank-select border border-slate-600" data-idx="${idx}">
+                <td class="px-2 py-1 border-b border-slate-700 text-center text-sm">${horse.umaban}</td>
+                <td class="px-2 py-1 border-b border-slate-700 text-center">
+                    <select class="bg-slate-800 text-white px-1 py-1 rounded rank-select border border-slate-600 text-sm w-12" data-idx="${idx}">
                         ${['S','A','B','C','D','E','F'].map(r => `<option value="${r}" ${horse.rank === r ? 'selected' : ''}>${r}</option>`).join('')}
                     </select>
+                </td>
+                <td class="px-2 py-1 border-b border-slate-700 horse-name font-bold text-sm">${horse.name}</td>
+                <td class="px-2 py-1 border-b border-slate-700 text-right">
+                    <input type="number" step="0.1" class="bg-slate-800 text-white w-16 px-1 py-1 rounded odds-input border border-slate-600 text-sm" data-idx="${idx}" value="${horse.odds}">
+                </td>
+                <td class="px-2 py-1 border-b border-slate-700 text-center">
+                    <input type="checkbox" class="audit-checkbox w-4 h-4 text-blue-600 bg-slate-800 border-slate-600 rounded" data-idx="${idx}" ${horse.passedStrikerValidation ? 'checked' : ''}>
                 </td>
             `;
             raceTableBody.appendChild(tr);
@@ -294,6 +304,13 @@ document.addEventListener('DOMContentLoaded', () => {
             el.addEventListener('change', (e) => {
                 const idx = parseInt(e.target.dataset.idx);
                 currentHorses[idx].rank = e.target.value;
+            });
+        });
+        
+        document.querySelectorAll('.audit-checkbox').forEach(el => {
+            el.addEventListener('change', (e) => {
+                const idx = parseInt(e.target.dataset.idx);
+                currentHorses[idx].passedStrikerValidation = e.target.checked;
             });
         });
         
@@ -328,20 +345,16 @@ document.addEventListener('DOMContentLoaded', () => {
             winList.innerHTML = `<li class="text-slate-400">対象馬なし</li>`;
         } else {
             res.winTargets.forEach(h => {
-                winList.innerHTML += `<li class="font-bold text-yellow-300">馬番 ${h.umaban} [${h.cls}] : 期待値 ${h.ev.toFixed(3)} ${h.amberPassed ? "✅" : "❌"} (MAO: ${h.mao.toFixed(1)})</li>`;
+                let unitStr = "1U";
+                if (h.cls === 'A3') unitStr = "3U";
+                else if (h.cls === 'B2') unitStr = "2U";
+                winList.innerHTML += `<li class="font-bold text-yellow-300">馬番 ${h.umaban} [${h.cls}] : 推奨 ${unitStr} / 期待値 ${h.ev.toFixed(3)} ${h.amberPassed ? "✅" : "❌"} (MAO: ${h.mao.toFixed(1)})</li>`;
             });
         }
 
         // 3. Wide Targets
         const wideList = document.getElementById('wideTargets');
-        wideList.innerHTML = "";
-        if (res.skipReason || res.wideTargets.length === 0) {
-            wideList.innerHTML = `<li class="text-slate-400">購入見送り (単勝のみ執行)</li>`;
-        } else {
-            res.wideTargets.forEach(w => {
-                 wideList.innerHTML += `<li>軸: ${w.axis.umaban} [${w.axis.cls}] - 相手: ${w.opp.umaban} [${w.opp.cls}]</li>`;
-            });
-        }
+        wideList.innerHTML = `<li class="text-slate-400">Ver.5.29により無効化 (単勝・三連複特化)</li>`;
 
         // 4. Sanrenpuku
         const sanList = document.getElementById('sanrenpukuTargets');
@@ -367,9 +380,16 @@ document.addEventListener('DOMContentLoaded', () => {
         let sortedHorses = [...res.horses].sort((a,b)=> a.umaban - b.umaban);
         sortedHorses.forEach(h => {
             const tr = document.createElement('tr');
+            
+            // Phase 4.5: X/D1 で未監査の馬をハイライト
+            const needsAudit = (h.cls === 'X' || h.cls === 'D1') && !h.passedStrikerValidation;
+            if (needsAudit) {
+                tr.classList.add('audit-alert');
+            }
+            
             tr.innerHTML = `
                 <td class="px-2 py-1 border-b border-slate-700">${h.umaban}</td>
-                <td class="px-2 py-1 border-b border-slate-700">${h.cls || '-'}</td>
+                <td class="px-2 py-1 border-b border-slate-700">${h.cls || '-'}${needsAudit ? ' ⚠️' : ''}</td>
                 <td class="px-2 py-1 border-b border-slate-700">${h.ev.toFixed(3)}</td>
                 <td class="px-2 py-1 border-b border-slate-700">${(h.winRate*100).toFixed(1)}%</td>
                 <td class="px-2 py-1 border-b border-slate-700">${h.mao === 999 ? '-' : h.mao.toFixed(1)}</td>
@@ -455,7 +475,9 @@ document.addEventListener('DOMContentLoaded', () => {
             // 確定オッズベースで最終解析を実行
             let tempHorses = JSON.parse(JSON.stringify(currentHorses));
             tempHorses.forEach(h => {
-                 if (h.finalOdds && h.finalOdds > 0) h.odds = h.finalOdds;
+                 if (h.finalOdds !== undefined) {
+                     h.odds = parseFloat(h.finalOdds) || 0;
+                 }
             });
             const tempRes = analyzeRace(tempHorses, isGradeRace);
             
@@ -499,13 +521,18 @@ document.addEventListener('DOMContentLoaded', () => {
 
         const getPay = (key) => {
             if (lastResultData && lastResultData.payouts && lastResultData.payouts[key]) {
-                return lastResultData.payouts[key].replace(/,/g, '').trim();
+                const arr = lastResultData.payouts[key];
+                if (Array.isArray(arr)) {
+                    return arr.map(item => `${item.combo}: ${item.amount}円`).join(' / ');
+                }
+                // 古い履歴データへの後方互換性（単一の文字列の場合）
+                return String(arr).replace(/円/g, "円 ").replace(/,/g, '').trim();
             }
             return "-";
         };
         const tanshoPay = getPay('単勝');
-        const widePay = getPay('ワイド').replace(/円/g, "円 ");
-        const umarenPay = getPay('馬連').replace(/円/g, "円 ");
+        const widePay = getPay('ワイド');
+        const umarenPay = getPay('馬連');
         const sanrenPay = getPay('3連複');
         const sanrentanPay = getPay('3連単');
 
@@ -523,7 +550,8 @@ document.addEventListener('DOMContentLoaded', () => {
                  dateStr, raceName, courseInfo, gradeStr, h.umaban, h.name,
                  h.popular || "-", h.odds ? h.odds.toFixed(1) : "0.0",
                  h.rank, h.ev ? h.ev.toFixed(3) : "0.000", h.cls || "N",
-                 "-", // 近走監査
+                 // 近走監査ステータス
+                 (h.cls === 'X' || h.cls === 'D1') ? (h.passedStrikerValidation ? "○" : "×") : "-",
                  h.finalPopular || "-",
                  (h.finalOdds && h.finalOdds > 0) ? h.finalOdds.toFixed(1) : "-",
                  (h.finalEv !== undefined && h.finalEv !== "-") ? h.finalEv.toFixed(3) : "-",

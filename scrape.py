@@ -203,12 +203,42 @@ class handler(BaseHTTPRequestHandler):
                 tn = th.get_text().strip()
                 tds = tr.select('td')
                 if len(tds) >= 2:
-                    val = tds[1].get_text(separator=' ').strip().replace('\n', ' ')
-                    if '単勝' in tn: payouts['単勝'] = val
-                    if 'ワイド' in tn: payouts['ワイド'] = val
-                    if '馬連' in tn: payouts['馬連'] = val
-                    if '3連複' in tn or '３連複' in tn: payouts['3連複'] = val
-                    if '3連単' in tn or '３連単' in tn: payouts['3連単'] = val
+                    # 組み合わせの抽出 (tds[0])
+                    raw_nums = re.findall(r'\b\d+\b', tds[0].get_text(separator=' '))
+                    nums = [n for n in raw_nums if n.isdigit()]
+                    
+                    # 金額の抽出 (tds[1])
+                    payout_html = str(tds[1])
+                    payout_html = re.sub(r'<br\s*/?>', '|', payout_html)
+                    payout_soup = BeautifulSoup(payout_html, 'html.parser')
+                    payout_text = payout_soup.get_text(separator='|')
+                    amounts = []
+                    for x in payout_text.split('|'):
+                        clean_str = re.sub(r'[^\d]', '', x)
+                        if clean_str:
+                            amounts.append(int(clean_str))
+                            
+                    # ペアの作成（金額の件数で馬番を分割・ハイフン結合）
+                    pairs = []
+                    if amounts and nums:
+                        chunk_size = len(nums) // len(amounts)
+                        if chunk_size > 0:
+                            for i in range(len(amounts)):
+                                combo = "-".join(nums[i * chunk_size : (i + 1) * chunk_size])
+                                pairs.append({"combo": combo, "amount": amounts[i]})
+                    
+                    # 万が一パースできなかった場合のフォールバック
+                    if not pairs and len(tds) >= 2:
+                         fallback_val = tds[1].get_text(separator=' ').strip().replace('\n', ' ')
+                         # 文字列のままでは不整合なので、数値だけ抽出しておく（将来の互換性のため）
+                         fallback_num = int(re.sub(r'[^\d]', '', fallback_val)) if re.sub(r'[^\d]', '', fallback_val) else 0
+                         pairs = [{"combo": "-", "amount": fallback_num}]
+
+                    if '単勝' in tn: payouts['単勝'] = pairs
+                    elif 'ワイド' in tn: payouts['ワイド'] = pairs
+                    elif '馬連' in tn: payouts['馬連'] = pairs
+                    elif '3連複' in tn or '３連複' in tn: payouts['3連複'] = pairs
+                    elif '3連単' in tn or '３連単' in tn: payouts['3連単'] = pairs
 
         return {
             "race_name": race_name, "venue": "", "race_num": "",
