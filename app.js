@@ -345,9 +345,29 @@ document.addEventListener('DOMContentLoaded', () => {
             winList.innerHTML = `<li class="text-slate-400">対象馬なし</li>`;
         } else {
             res.winTargets.forEach(h => {
-                let unitStr = "1U";
-                if (h.cls === 'A3') unitStr = "3U";
-                else if (h.cls === 'B2') unitStr = "2U";
+                let recLevel = 'Low';
+                if (res.recommendation.includes('SSS')) recLevel = 'SSS';
+                else if (res.recommendation.includes('SS')) recLevel = 'SS';
+                else if (res.recommendation.includes('(S)')) recLevel = 'S';
+
+                let units = 0;
+                if (h.cls === 'A3') {
+                    if (recLevel === 'SSS') units = 6;
+                    else if (recLevel === 'SS') units = 5;
+                    else if (recLevel === 'S') units = 4;
+                    else units = 3;
+                } else if (h.cls === 'B2') {
+                    if (recLevel === 'SSS') units = 4;
+                    else if (recLevel === 'SS') units = 3;
+                    else units = 2;
+                } else if (h.cls === 'A2' || h.cls === 'B1') {
+                    if (recLevel === 'SSS' || recLevel === 'SS') units = 2;
+                    else units = 1;
+                } else if (h.cls === 'B3' || h.cls === 'D1' || h.cls === 'X') {
+                    units = 1;
+                }
+                
+                let unitStr = units > 0 ? `${units}U` : "0U";
                 winList.innerHTML += `<li class="font-bold text-yellow-300">馬番 ${h.umaban} [${h.cls}] : 推奨 ${unitStr} / 期待値 ${h.ev.toFixed(3)} ${h.amberPassed ? "✅" : "❌"} (MAO: ${h.mao.toFixed(1)})</li>`;
             });
         }
@@ -369,6 +389,7 @@ document.addEventListener('DOMContentLoaded', () => {
                <li><strong class="text-purple-400">1列目 (軸):</strong> ${row1}</li>
                <li><strong class="text-blue-400">2列目 (相手):</strong> ${row2 || 'なし'}</li>
                <li><strong class="text-gray-300">3列目 (網):</strong> ${row3 || 'なし'}</li>
+               <li class="text-slate-400 mt-2">※資金配分：廃止（単勝完全集中）</li>
             `;
         }
 
