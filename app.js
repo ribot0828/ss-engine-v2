@@ -354,17 +354,16 @@ document.addEventListener('DOMContentLoaded', () => {
                 if (h.cls === 'A3') {
                     if (recLevel === 'SSS') units = 6;
                     else if (recLevel === 'SS') units = 5;
-                    else if (recLevel === 'S') units = 4;
-                    else units = 3;
+                    else if (recLevel === 'S') units = 3;
+                    else units = 1; // Low
                 } else if (h.cls === 'B2') {
                     if (recLevel === 'SSS') units = 4;
                     else if (recLevel === 'SS') units = 3;
-                    else units = 2;
-                } else if (h.cls === 'A2' || h.cls === 'B1') {
+                    else if (recLevel === 'S') units = 2;
+                    else units = 1; // Low
+                } else if (['A2', 'B1', 'D1', 'B3', 'X'].includes(h.cls)) {
                     if (recLevel === 'SSS' || recLevel === 'SS') units = 2;
-                    else units = 1;
-                } else if (h.cls === 'B3' || h.cls === 'D1' || h.cls === 'X') {
-                    units = 1;
+                    else units = 1; // S, Low
                 }
                 
                 let unitStr = units > 0 ? `${units}U` : "0U";
@@ -389,7 +388,6 @@ document.addEventListener('DOMContentLoaded', () => {
                <li><strong class="text-purple-400">1列目 (軸):</strong> ${row1}</li>
                <li><strong class="text-blue-400">2列目 (相手):</strong> ${row2 || 'なし'}</li>
                <li><strong class="text-gray-300">3列目 (網):</strong> ${row3 || 'なし'}</li>
-               <li class="text-slate-400 mt-2">※資金配分：廃止（単勝完全集中）</li>
             `;
         }
 
