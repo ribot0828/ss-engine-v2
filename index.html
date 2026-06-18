@@ -44,15 +44,6 @@
                 <button id="fetchBtn" class="btn-primary text-white font-semibold py-2 px-6 rounded-lg">
                     出馬表を取得
                 </button>
-                <button id="updateOddsBtn" disabled class="bg-gray-600 hover:bg-gray-500 text-white font-semibold py-2 px-4 rounded-lg transition-colors cursor-not-allowed">
-                    <svg class="w-5 h-5 inline-block mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path></svg> オッズ更新
-                </button>
-            </div>
-            
-            <div class="flex items-center gap-2 mb-4 text-sm text-slate-300">
-                <input type="checkbox" id="autoUpdateCheck" class="w-4 h-4 rounded text-blue-500 bg-slate-800 border-slate-600 focus:ring-blue-500 focus:ring-2 disabled:opacity-50" disabled>
-                <label for="autoUpdateCheck">オッズを自動更新する (60秒間隔)</label>
-                <span id="updateStatusText" class="ml-4 text-green-400 text-xs font-semibold"></span>
             </div>
             <div id="errorBox" class="hidden bg-red-900/50 border border-red-500 text-red-200 px-4 py-3 rounded-lg mb-4"></div>
 

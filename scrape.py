@@ -28,39 +28,6 @@ class handler(BaseHTTPRequestHandler):
             self.wfile.write(json.dumps({"error": "Scraping failed: " + str(e)}).encode('utf-8'))
         return
 
-    def audit_horse_history(self, horse_id, current_grade):
-        if not horse_id or horse_id == "不明": return "-"
-        url = f"https://db.netkeiba.com/horse/{horse_id}/"
-        try:
-            headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}
-            res = requests.get(url, headers=headers, timeout=5)
-            res.encoding = 'euc-jp'
-            soup = BeautifulSoup(res.text, 'html.parser')
-            table = soup.select_one('table.db_h_race_results')
-            if not table: return "NG (データ無)"
-            rows = table.select('tbody tr')
-            checked = 0
-            for row in rows:
-                if checked >= 5: break
-                cols = row.select('td')
-                if len(cols) < 19: continue
-                race_name = cols[4].get_text().strip()
-                rank = cols[11].get_text().strip()
-                diff = cols[18].get_text().strip()
-                is_same = current_grade in race_name or (current_grade == "OP" and "オープン" in race_name)
-                if not is_same and 'G' in current_grade:
-                    m = re.search(r'G[1-3]', race_name)
-                    if m and m.group(0) in current_grade: is_same = True
-                if is_same:
-                    checked += 1
-                    try:
-                        val = float(diff.replace('+', '').replace('-', ''))
-                        if val <= 1.0: return "合格"
-                    except:
-                        if rank == "1" or not diff or diff.startswith('-'): return "合格"
-            return "不合格"
-        except: return "エラー"
-
     def scrape_netkeiba(self, url):
         # 1. URLの正規化 (スマホ版をPC版に強制変換)
         match = re.search(r'race_id=(\d+)', url)
@@ -190,9 +157,9 @@ class handler(BaseHTTPRequestHandler):
                     horses.append({"umaban": umaban, "name": name, "horse_id": hid, "odds": odds, "popular": "", "rank": "B", "placing": "", "audit": "-"})
                 except: pass
 
-        # 4. 琥珀監査の実行
-        cg = grade_info.split(' ')[0]
-        for h in horses: h["audit"] = self.audit_horse_history(h["horse_id"], cg)
+        # 4. 近走監査はアプリ側の手動チェック（passedStrikerValidation）で行うため、
+        #    サーバー側の自動監査（馬1頭ごとのnetkeiba直列アクセス）は廃止。
+        #    "audit" 列は各馬のデフォルト値 "-" のまま返す。
 
         # 5. 払戻金の取得
         payouts = {}

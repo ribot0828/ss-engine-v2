@@ -4,9 +4,6 @@ document.addEventListener('DOMContentLoaded', () => {
     const fetchBtn = document.getElementById('fetchBtn');
     const analyzeBtn = document.getElementById('analyzeBtn');
     const urlInput = document.getElementById('urlInput');
-    const updateOddsBtn = document.getElementById('updateOddsBtn');
-    const autoUpdateCheck = document.getElementById('autoUpdateCheck');
-    const updateStatusText = document.getElementById('updateStatusText');
     const errorBox = document.getElementById('errorBox');
     const raceTableBody = document.querySelector('#raceTable tbody');
     const resultsPanel = document.getElementById('resultsPanel');
@@ -25,7 +22,6 @@ document.addEventListener('DOMContentLoaded', () => {
     let lastFetchedUrl = "";
     let currentVenue = "";
     let currentRaceNum = "";
-    let autoUpdateInterval = null;
 
     const showError = (msg) => {
         if (!msg) {
@@ -125,11 +121,6 @@ document.addEventListener('DOMContentLoaded', () => {
                 gradeInput.value = savedGradeInfo;
             }
             
-            updateOddsBtn.disabled = false;
-            updateOddsBtn.classList.remove('cursor-not-allowed', 'bg-gray-600');
-            updateOddsBtn.classList.add('bg-blue-600', 'hover:bg-blue-500');
-            autoUpdateCheck.disabled = false;
-            
             currentVenue = item.venue || "";
             currentRaceNum = item.raceNum || "";
             
@@ -198,13 +189,9 @@ document.addEventListener('DOMContentLoaded', () => {
             }
             
             lastFetchedUrl = url;
-            updateOddsBtn.disabled = false;
-            updateOddsBtn.classList.remove('cursor-not-allowed', 'bg-gray-600');
-            updateOddsBtn.classList.add('bg-blue-600', 'hover:bg-blue-500');
-            autoUpdateCheck.disabled = false;
-            
+
             if (data.odds_unavailable) {
-                showError("⚠️ 馬名を取得しました。オッズはまだ発売されていません。発売後に「オッズ更新」ボタンを押してください。");
+                showError("⚠️ 馬名を取得しました。オッズはまだ発売されていません。発売後にJRAのオッズを貼り付けて反映してください。");
             }
             
             renderTable();
@@ -213,60 +200,6 @@ document.addEventListener('DOMContentLoaded', () => {
         } finally {
             fetchBtn.disabled = false;
             fetchBtn.textContent = "出馬表を取得";
-        }
-    });
-
-    const refreshOdds = async () => {
-        if (!lastFetchedUrl) return;
-        
-        updateOddsBtn.disabled = true;
-        updateStatusText.textContent = "更新中...";
-        
-        try {
-            const res = await fetch(`/api/index?url=${encodeURIComponent(lastFetchedUrl)}`);
-            if (!res.ok) throw new Error("オッズの取得に失敗");
-            const data = await res.json();
-            
-            let updatedCount = 0;
-            data.horses.forEach(newHorse => {
-                const h = currentHorses.find(x => x.umaban === newHorse.umaban);
-                if (h && h.odds !== newHorse.odds) {
-                    h.odds = newHorse.odds;
-                    updatedCount++;
-                }
-            });
-            
-            renderTable();
-            if (updatedCount > 0) {
-               updateStatusText.textContent = `更新完了 (${updatedCount}頭のオッズ変動)`;
-               setTimeout(() => { updateStatusText.textContent = ""; }, 3000);
-               
-               // 自動的に再解析を実行
-               if (!analyzeBtn.disabled) {
-                   analyzeBtn.click();
-               }
-            } else {
-               updateStatusText.textContent = "変動なし";
-               setTimeout(() => { updateStatusText.textContent = ""; }, 3000);
-            }
-        } catch (err) {
-            console.error(err);
-            updateStatusText.textContent = "更新エラー";
-        } finally {
-            updateOddsBtn.disabled = false;
-        }
-    };
-
-    updateOddsBtn.addEventListener('click', refreshOdds);
-
-    autoUpdateCheck.addEventListener('change', (e) => {
-        if (e.target.checked) {
-            updateStatusText.textContent = "自動更新ON";
-            autoUpdateInterval = setInterval(refreshOdds, 60000); // 60秒
-        } else {
-            updateStatusText.textContent = "";
-            if (autoUpdateInterval) clearInterval(autoUpdateInterval);
-            autoUpdateInterval = null;
         }
     });
 
