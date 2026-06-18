@@ -40,7 +40,9 @@ class handler(BaseHTTPRequestHandler):
 
         headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"}
         res = requests.get(url, headers=headers)
-        res.encoding = 'euc-jp'
+        # netkeibaはページ・時期によりUTF-8/EUC-JPが混在するため、エンコーディングを
+        # ハードコードせずバイト列から自動判定する（UTF-8移行による文字化け対策）
+        res.encoding = res.apparent_encoding or res.encoding
         soup = BeautifulSoup(res.text, 'html.parser')
 
         # 2. メタ情報の抽出
