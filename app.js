@@ -1,4 +1,4 @@
-import { analyzeRace } from './logic.js?v=5.30.0';
+import { analyzeRace } from './logic.js?v=5.3.0';
 
 document.addEventListener('DOMContentLoaded', () => {
     const fetchBtn = document.getElementById('fetchBtn');
@@ -271,37 +271,58 @@ document.addEventListener('DOMContentLoaded', () => {
             skipInfo.innerHTML = `<span class="text-green-400">✅ 執行対象</span>`;
         }
 
-        // 2. Win Targets
+        // 2. Win Targets（Ver.5.3: 定額フラット 1U=100円 ＋ 1レース投入上限キャップ／比例縮小）
         const winList = document.getElementById('winTargets');
         winList.innerHTML = "";
         if (res.winTargets.length === 0) {
             winList.innerHTML = `<li class="text-slate-400">対象馬なし</li>`;
         } else {
-            res.winTargets.forEach(h => {
-                let recLevel = 'Low';
-                if (res.recommendation.includes('SSS')) recLevel = 'SSS';
-                else if (res.recommendation.includes('SS')) recLevel = 'SS';
-                else if (res.recommendation.includes('(S)')) recLevel = 'S';
+            let recLevel = 'Low';
+            if (res.recommendation.includes('SSS')) recLevel = 'SSS';
+            else if (res.recommendation.includes('SS')) recLevel = 'SS';
+            else if (res.recommendation.includes('(S)')) recLevel = 'S';
 
-                let units = 0;
-                if (h.cls === 'A3') {
-                    if (recLevel === 'SSS') units = 6;
-                    else if (recLevel === 'SS') units = 5;
-                    else if (recLevel === 'S') units = 3;
-                    else units = 1; // Low
-                } else if (h.cls === 'B2') {
-                    if (recLevel === 'SSS') units = 4;
-                    else if (recLevel === 'SS') units = 3;
-                    else if (recLevel === 'S') units = 2;
-                    else units = 1; // Low
-                } else if (['A2', 'B1', 'D1', 'B3', 'X'].includes(h.cls)) {
-                    if (recLevel === 'SSS' || recLevel === 'SS') units = 2;
-                    else units = 1; // S, Low
-                }
-                
-                let unitStr = units > 0 ? `${units}U` : "0U";
-                winList.innerHTML += `<li class="font-bold text-yellow-300">馬番 ${h.umaban} [${h.cls}] : 推奨 ${unitStr} / 期待値 ${h.ev.toFixed(3)} ${h.amberPassed ? "✅" : "❌"} (MAO: ${h.mao.toFixed(1)})</li>`;
+            // 推奨ユニット（U表。SSS/SSの「他」=2 を維持）
+            const rawUnits = res.winTargets.map(h => {
+                if (h.cls === 'A3') return recLevel === 'SSS' ? 6 : recLevel === 'SS' ? 5 : recLevel === 'S' ? 3 : 1;
+                if (h.cls === 'B2') return recLevel === 'SSS' ? 4 : recLevel === 'SS' ? 3 : recLevel === 'S' ? 2 : 1;
+                if (['A2', 'B1', 'D1', 'B3', 'X'].includes(h.cls)) return (recLevel === 'SSS' || recLevel === 'SS') ? 2 : 1;
+                return 0;
             });
+
+            // バンクロールから1レース投入上限(U) を決定（<20,000円→3U固定 / ≥20,000円→bankroll×5%）
+            const bankrollEl = document.getElementById('bankrollInput');
+            const bankroll = bankrollEl ? (parseInt(bankrollEl.value) || 0) : 20000;
+            const capU = bankroll < 20000 ? 3 : Math.floor(bankroll * 0.05 / 100);
+
+            // 上限超過時は比例縮小（整数Uに丸め、合計が上限を超えないよう端数を高小数部から配分）
+            const rawTotal = rawUnits.reduce((a, b) => a + b, 0);
+            let finalUnits = rawUnits.slice();
+            let capped = false;
+            if (rawTotal > capU && rawTotal > 0) {
+                capped = true;
+                const factor = capU / rawTotal;
+                const scaled = rawUnits.map(u => u * factor);
+                finalUnits = scaled.map(Math.floor);
+                let rem = capU - finalUnits.reduce((a, b) => a + b, 0);
+                const order = scaled.map((s, i) => ({ i, frac: s - Math.floor(s) })).sort((a, b) => b.frac - a.frac);
+                for (let k = 0; k < order.length && rem > 0; k++) { finalUnits[order[k].i]++; rem--; }
+            }
+
+            res.winTargets.forEach((h, idx) => {
+                const u = finalUnits[idx];
+                const raw = rawUnits[idx];
+                const capMark = (capped && u !== raw) ? ` <span class="text-orange-400">(元${raw}U→${u}U)</span>` : "";
+                const dropMark = u === 0 ? ' <span class="text-red-400">(上限により見送り)</span>' : "";
+                winList.innerHTML += `<li class="font-bold text-yellow-300">馬番 ${h.umaban} [${h.cls}] : 推奨 ${u}U${capMark}${dropMark} / 期待値 ${h.ev.toFixed(3)} ${h.amberPassed ? "✅" : "❌"} (MAO: ${h.mao.toFixed(1)})</li>`;
+            });
+
+            const finalTotal = finalUnits.reduce((a, b) => a + b, 0);
+            let capNote = `<li class="mt-2 text-sm text-slate-300">💰 1レース投入: <strong>${finalTotal}U (${finalTotal * 100}円)</strong> ／ 上限 ${capU}U (${capU * 100}円)${capped ? ' <span class="text-orange-400">※上限キャップ適用（比例縮小）</span>' : ''}</li>`;
+            if (bankroll < 15000) {
+                capNote += `<li class="text-sm text-red-400 font-bold">⚠️ バンクロールが最低ライン 15,000円 を下回っています（運用停止を検討）</li>`;
+            }
+            winList.innerHTML += capNote;
         }
 
         // 3. Wide Targets

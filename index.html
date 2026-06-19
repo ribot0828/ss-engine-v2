@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>SS-Engine Ver.5.30 | 競馬期待値解析 AI</title>
+    <title>SS-Engine Ver.5.3 | 競馬期待値解析 AI</title>
     <!-- Google Fonts -->
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&display=swap" rel="stylesheet">
     <!-- Tailwind CSS -->
@@ -17,7 +17,7 @@
         <!-- Header -->
         <header class="text-center py-6">
             <h1 class="text-4xl md:text-5xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-blue-400 to-purple-500 mb-2">
-                SS-Engine <span class="text-2xl font-light text-slate-300">Ver.5.30</span>
+                SS-Engine <span class="text-2xl font-light text-slate-300">Ver.5.3</span>
             </h1>
             <p class="text-slate-400">Aggressive-Audit Edition / 期待値の歪みを捉える解析システム</p>
         </header>
@@ -56,6 +56,10 @@
                 <div class="flex flex-col justify-end">
                     <label class="text-xs text-slate-500 mb-1">グレード・頭数</label>
                     <input type="text" id="raceGrade" placeholder="例: G1 18頭" class="bg-slate-800 border border-slate-600 rounded px-3 py-1 text-white text-sm focus:outline-none focus:border-blue-500">
+                </div>
+                <div class="flex flex-col justify-end">
+                    <label class="text-xs text-slate-500 mb-1">バンクロール(円) <span class="text-slate-600">初期2万/最低1.5万</span></label>
+                    <input type="number" id="bankrollInput" value="20000" step="1000" min="0" class="bg-slate-800 border border-slate-600 rounded px-3 py-1 text-white text-sm w-32 focus:outline-none focus:border-blue-500">
                 </div>
             </div>
 
@@ -186,6 +190,6 @@
         </footer>
     </div>
     
-    <script type="module" src="app.js?v=5.34.0"></script>
+    <script type="module" src="app.js?v=5.35.0"></script>
 </body>
 </html>

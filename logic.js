@@ -113,7 +113,7 @@ export function analyzeRace(horses, isGradeRace = false) {
     const attackClassesD1 = new Set(['D1']); // 1.0, Buffer 1.0
 
     horses.forEach(h => {
-        if (defenseClasses.has(h.cls)) h.maoRaw = 0.50 / h.winRate;
+        if (defenseClasses.has(h.cls)) h.maoRaw = 0.60 / h.winRate; // Ver.5.3: 防御系係数 0.50→0.60（三連複軸の観測精度向上。単勝P&L影響ゼロ）
         else if (attackClasses1.has(h.cls)) h.maoRaw = 0.90 / h.winRate;
         else if (attackClassesX.has(h.cls)) h.maoRaw = 3.00 / h.winRate;
         else if (attackClassesD1.has(h.cls)) h.maoRaw = 1.00 / h.winRate;
