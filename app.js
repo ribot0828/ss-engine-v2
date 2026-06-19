@@ -423,6 +423,24 @@ document.addEventListener('DOMContentLoaded', () => {
         const raceName = document.getElementById('raceTitle').textContent.trim();
         const rec = res.recommendation;
 
+        // クラス別実績データ（SS-Analyzer検証結果ハードコード）
+        const CLASS_STATS = {
+            'A0':  { n: 140, winRate: '27.9%', placeRate: '58.6%', winROI: '75.1%' },
+            'A1':  { n: 170, winRate: '15.3%', placeRate: '45.3%', winROI: '68.9%' },
+            'A2':  { n: 71,  winRate: '16.9%', placeRate: '40.8%', winROI: '116.6%' },
+            'A3':  { n: 20,  winRate: '30.0%', placeRate: '45.0%', winROI: '314.0%' },
+            'B0':  { n: 274, winRate: '9.9%',  placeRate: '41.2%', winROI: '65.3%' },
+            'B0+': { n: 167, winRate: '22.2%', placeRate: '56.9%', winROI: '75.4%' },
+            'B1':  { n: 125, winRate: '11.2%', placeRate: '29.6%', winROI: '129.2%' },
+            'B2':  { n: 79,  winRate: '11.4%', placeRate: '24.1%', winROI: '182.0%' },
+            'B3':  { n: 287, winRate: '5.6%',  placeRate: '17.8%', winROI: '132.8%' },
+            'D1':  { n: 119, winRate: '4.2%',  placeRate: '8.4%',  winROI: '294.4%' },
+            'S0':  { n: 87,  winRate: '36.8%', placeRate: '75.9%', winROI: '75.9%' },
+            'S1':  { n: 44,  winRate: '25.0%', placeRate: '59.1%', winROI: '98.2%' },
+            'S2':  { n: 7,   winRate: '14.3%', placeRate: '71.4%', winROI: '65.7%' },
+            'X':   { n: 91,  winRate: '2.2%',  placeRate: '4.4%',  winROI: '361.4%' },
+        };
+
         let xLines = [];
         xLines.push(`SS-ENGINE 出力 ▪ ${raceName}`);
         xLines.push(`推奨度 ${rec}`);
@@ -432,29 +450,11 @@ document.addEventListener('DOMContentLoaded', () => {
         if (res.winTargets.length > 0) {
             xLines.push('━━ 単勝 ━━');
             res.winTargets.forEach(h => {
-                // 推奨度に基づくU数を算出
-                let recLevel = 'Low';
-                if (rec.includes('SSS')) recLevel = 'SSS';
-                else if (rec.includes('SS')) recLevel = 'SS';
-                else if (rec.includes('(S)')) recLevel = 'S';
-
-                let units = 0;
-                if (h.cls === 'A3') {
-                    if (recLevel === 'SSS') units = 6;
-                    else if (recLevel === 'SS') units = 5;
-                    else if (recLevel === 'S') units = 3;
-                    else units = 1;
-                } else if (h.cls === 'B2') {
-                    if (recLevel === 'SSS') units = 4;
-                    else if (recLevel === 'SS') units = 3;
-                    else if (recLevel === 'S') units = 2;
-                    else units = 1;
-                } else if (['A2', 'B1', 'D1', 'B3', 'X'].includes(h.cls)) {
-                    if (recLevel === 'SSS' || recLevel === 'SS') units = 2;
-                    else units = 1;
+                xLines.push(`${h.umaban} ${h.name} [${h.cls}] EV ${h.ev.toFixed(2)} / ${h.odds.toFixed(1)}倍`);
+                const st = CLASS_STATS[h.cls];
+                if (st) {
+                    xLines.push(`  class[${h.cls}] n=${st.n} 勝率${st.winRate} 単勝回収${st.winROI}`);
                 }
-
-                xLines.push(`${h.umaban} ${h.name} [${h.cls}] EV ${h.ev.toFixed(2)} / ${h.odds.toFixed(1)}倍 ${units}U`);
             });
         } else {
             xLines.push('━━ 単勝 ━━');
@@ -467,16 +467,10 @@ document.addEventListener('DOMContentLoaded', () => {
             xLines.push('━━ 軸（複勝）━━');
             const ax = res.sanrenpuku.axis;
             xLines.push(`${ax.umaban} ${ax.name} [${ax.cls}]`);
-        }
-
-        // 三連複セクション
-        if (!res.skipReason && res.sanrenpuku.axis) {
-            xLines.push('');
-            xLines.push('━━ 三連複 ━━');
-            const row1 = res.sanrenpuku.axis.umaban;
-            const row2 = res.sanrenpuku.row2.map(h => h.umaban).join(',');
-            const row3 = res.sanrenpuku.row3.map(h => h.umaban).join(',');
-            xLines.push(`${row1} - ${row2} - ${row3}`);
+            const st = CLASS_STATS[ax.cls];
+            if (st) {
+                xLines.push(`  class[${ax.cls}] n=${st.n} 勝率${st.winRate} 複勝率${st.placeRate}`);
+            }
         }
 
         xLines.push('');
