@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>SS-Engine Ver.5.3 | 競馬期待値解析 AI</title>
+    <title>SS-Engine Ver.5.30 | 競馬期待値解析 AI</title>
     <!-- Google Fonts -->
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&display=swap" rel="stylesheet">
     <!-- Tailwind CSS -->
@@ -17,7 +17,7 @@
         <!-- Header -->
         <header class="text-center py-6">
             <h1 class="text-4xl md:text-5xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-blue-400 to-purple-500 mb-2">
-                SS-Engine <span class="text-2xl font-light text-slate-300">Ver.5.3</span>
+                SS-Engine <span class="text-2xl font-light text-slate-300">Ver.5.30</span>
             </h1>
             <p class="text-slate-400">Aggressive-Audit Edition / 期待値の歪みを捉える解析システム</p>
         </header>
@@ -44,6 +44,15 @@
                 <button id="fetchBtn" class="btn-primary text-white font-semibold py-2 px-6 rounded-lg">
                     出馬表を取得
                 </button>
+                <button id="updateOddsBtn" disabled class="bg-gray-600 hover:bg-gray-500 text-white font-semibold py-2 px-4 rounded-lg transition-colors cursor-not-allowed">
+                    <svg class="w-5 h-5 inline-block mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path></svg> オッズ更新
+                </button>
+            </div>
+            
+            <div class="flex items-center gap-2 mb-4 text-sm text-slate-300">
+                <input type="checkbox" id="autoUpdateCheck" class="w-4 h-4 rounded text-blue-500 bg-slate-800 border-slate-600 focus:ring-blue-500 focus:ring-2 disabled:opacity-50" disabled>
+                <label for="autoUpdateCheck">オッズを自動更新する (60秒間隔)</label>
+                <span id="updateStatusText" class="ml-4 text-green-400 text-xs font-semibold"></span>
             </div>
             <div id="errorBox" class="hidden bg-red-900/50 border border-red-500 text-red-200 px-4 py-3 rounded-lg mb-4"></div>
 
@@ -56,10 +65,6 @@
                 <div class="flex flex-col justify-end">
                     <label class="text-xs text-slate-500 mb-1">グレード・頭数</label>
                     <input type="text" id="raceGrade" placeholder="例: G1 18頭" class="bg-slate-800 border border-slate-600 rounded px-3 py-1 text-white text-sm focus:outline-none focus:border-blue-500">
-                </div>
-                <div class="flex flex-col justify-end">
-                    <label class="text-xs text-slate-500 mb-1">バンクロール(円) <span class="text-slate-600">初期2万/最低1.5万</span></label>
-                    <input type="number" id="bankrollInput" value="20000" step="1000" min="0" class="bg-slate-800 border border-slate-600 rounded px-3 py-1 text-white text-sm w-32 focus:outline-none focus:border-blue-500">
                 </div>
             </div>
 
@@ -139,6 +144,17 @@
                             <h4 class="text-sm text-slate-400 mb-1">【三連複 (Striker-Core 1-3-10)】</h4>
                             <ul id="sanrenpukuTargets" class="list-none bg-slate-800/50 p-3 rounded text-sm space-y-1"></ul>
                         </div>
+                    </div>
+                    <!-- X Post Copy Template -->
+                    <div class="mt-4 pt-4 border-t border-slate-700">
+                        <div class="flex items-center gap-3 mb-2">
+                            <h4 class="text-sm text-slate-400">【Xポスト用テンプレート】</h4>
+                            <button id="copyXPostBtn" class="bg-slate-700 hover:bg-slate-600 text-white text-xs font-semibold py-1 px-4 rounded-lg transition-colors border border-slate-500">
+                                📋 コピー
+                            </button>
+                            <span id="copyXPostStatus" class="text-xs text-green-400 hidden">✅ コピーしました</span>
+                        </div>
+                        <pre id="xPostPreview" class="bg-slate-900/80 text-slate-200 p-3 rounded text-xs whitespace-pre-wrap font-mono leading-relaxed border border-slate-700 max-h-64 overflow-y-auto"></pre>
                     </div>
                 </div>
             </div>

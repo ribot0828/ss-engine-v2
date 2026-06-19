@@ -1,9 +1,12 @@
-import { analyzeRace } from './logic.js?v=5.3.0';
+import { analyzeRace } from './logic.js?v=5.30.0';
 
 document.addEventListener('DOMContentLoaded', () => {
     const fetchBtn = document.getElementById('fetchBtn');
     const analyzeBtn = document.getElementById('analyzeBtn');
     const urlInput = document.getElementById('urlInput');
+    const updateOddsBtn = document.getElementById('updateOddsBtn');
+    const autoUpdateCheck = document.getElementById('autoUpdateCheck');
+    const updateStatusText = document.getElementById('updateStatusText');
     const errorBox = document.getElementById('errorBox');
     const raceTableBody = document.querySelector('#raceTable tbody');
     const resultsPanel = document.getElementById('resultsPanel');
@@ -22,6 +25,7 @@ document.addEventListener('DOMContentLoaded', () => {
     let lastFetchedUrl = "";
     let currentVenue = "";
     let currentRaceNum = "";
+    let autoUpdateInterval = null;
 
     const showError = (msg) => {
         if (!msg) {
@@ -121,6 +125,11 @@ document.addEventListener('DOMContentLoaded', () => {
                 gradeInput.value = savedGradeInfo;
             }
             
+            updateOddsBtn.disabled = false;
+            updateOddsBtn.classList.remove('cursor-not-allowed', 'bg-gray-600');
+            updateOddsBtn.classList.add('bg-blue-600', 'hover:bg-blue-500');
+            autoUpdateCheck.disabled = false;
+            
             currentVenue = item.venue || "";
             currentRaceNum = item.raceNum || "";
             
@@ -189,9 +198,13 @@ document.addEventListener('DOMContentLoaded', () => {
             }
             
             lastFetchedUrl = url;
-
+            updateOddsBtn.disabled = false;
+            updateOddsBtn.classList.remove('cursor-not-allowed', 'bg-gray-600');
+            updateOddsBtn.classList.add('bg-blue-600', 'hover:bg-blue-500');
+            autoUpdateCheck.disabled = false;
+            
             if (data.odds_unavailable) {
-                showError("⚠️ 馬名を取得しました。オッズはまだ発売されていません。発売後にJRAのオッズを貼り付けて反映してください。");
+                showError("⚠️ 馬名を取得しました。オッズはまだ発売されていません。発売後に「オッズ更新」ボタンを押してください。");
             }
             
             renderTable();
@@ -200,6 +213,60 @@ document.addEventListener('DOMContentLoaded', () => {
         } finally {
             fetchBtn.disabled = false;
             fetchBtn.textContent = "出馬表を取得";
+        }
+    });
+
+    const refreshOdds = async () => {
+        if (!lastFetchedUrl) return;
+        
+        updateOddsBtn.disabled = true;
+        updateStatusText.textContent = "更新中...";
+        
+        try {
+            const res = await fetch(`/api/index?url=${encodeURIComponent(lastFetchedUrl)}`);
+            if (!res.ok) throw new Error("オッズの取得に失敗");
+            const data = await res.json();
+            
+            let updatedCount = 0;
+            data.horses.forEach(newHorse => {
+                const h = currentHorses.find(x => x.umaban === newHorse.umaban);
+                if (h && h.odds !== newHorse.odds) {
+                    h.odds = newHorse.odds;
+                    updatedCount++;
+                }
+            });
+            
+            renderTable();
+            if (updatedCount > 0) {
+               updateStatusText.textContent = `更新完了 (${updatedCount}頭のオッズ変動)`;
+               setTimeout(() => { updateStatusText.textContent = ""; }, 3000);
+               
+               // 自動的に再解析を実行
+               if (!analyzeBtn.disabled) {
+                   analyzeBtn.click();
+               }
+            } else {
+               updateStatusText.textContent = "変動なし";
+               setTimeout(() => { updateStatusText.textContent = ""; }, 3000);
+            }
+        } catch (err) {
+            console.error(err);
+            updateStatusText.textContent = "更新エラー";
+        } finally {
+            updateOddsBtn.disabled = false;
+        }
+    };
+
+    updateOddsBtn.addEventListener('click', refreshOdds);
+
+    autoUpdateCheck.addEventListener('change', (e) => {
+        if (e.target.checked) {
+            updateStatusText.textContent = "自動更新ON";
+            autoUpdateInterval = setInterval(refreshOdds, 60000); // 60秒
+        } else {
+            updateStatusText.textContent = "";
+            if (autoUpdateInterval) clearInterval(autoUpdateInterval);
+            autoUpdateInterval = null;
         }
     });
 
@@ -271,58 +338,37 @@ document.addEventListener('DOMContentLoaded', () => {
             skipInfo.innerHTML = `<span class="text-green-400">✅ 執行対象</span>`;
         }
 
-        // 2. Win Targets（Ver.5.3: 定額フラット 1U=100円 ＋ 1レース投入上限キャップ／比例縮小）
+        // 2. Win Targets
         const winList = document.getElementById('winTargets');
         winList.innerHTML = "";
         if (res.winTargets.length === 0) {
             winList.innerHTML = `<li class="text-slate-400">対象馬なし</li>`;
         } else {
-            let recLevel = 'Low';
-            if (res.recommendation.includes('SSS')) recLevel = 'SSS';
-            else if (res.recommendation.includes('SS')) recLevel = 'SS';
-            else if (res.recommendation.includes('(S)')) recLevel = 'S';
+            res.winTargets.forEach(h => {
+                let recLevel = 'Low';
+                if (res.recommendation.includes('SSS')) recLevel = 'SSS';
+                else if (res.recommendation.includes('SS')) recLevel = 'SS';
+                else if (res.recommendation.includes('(S)')) recLevel = 'S';
 
-            // 推奨ユニット（U表。SSS/SSの「他」=2 を維持）
-            const rawUnits = res.winTargets.map(h => {
-                if (h.cls === 'A3') return recLevel === 'SSS' ? 6 : recLevel === 'SS' ? 5 : recLevel === 'S' ? 3 : 1;
-                if (h.cls === 'B2') return recLevel === 'SSS' ? 4 : recLevel === 'SS' ? 3 : recLevel === 'S' ? 2 : 1;
-                if (['A2', 'B1', 'D1', 'B3', 'X'].includes(h.cls)) return (recLevel === 'SSS' || recLevel === 'SS') ? 2 : 1;
-                return 0;
+                let units = 0;
+                if (h.cls === 'A3') {
+                    if (recLevel === 'SSS') units = 6;
+                    else if (recLevel === 'SS') units = 5;
+                    else if (recLevel === 'S') units = 3;
+                    else units = 1; // Low
+                } else if (h.cls === 'B2') {
+                    if (recLevel === 'SSS') units = 4;
+                    else if (recLevel === 'SS') units = 3;
+                    else if (recLevel === 'S') units = 2;
+                    else units = 1; // Low
+                } else if (['A2', 'B1', 'D1', 'B3', 'X'].includes(h.cls)) {
+                    if (recLevel === 'SSS' || recLevel === 'SS') units = 2;
+                    else units = 1; // S, Low
+                }
+                
+                let unitStr = units > 0 ? `${units}U` : "0U";
+                winList.innerHTML += `<li class="font-bold text-yellow-300">馬番 ${h.umaban} [${h.cls}] : 推奨 ${unitStr} / 期待値 ${h.ev.toFixed(3)} ${h.amberPassed ? "✅" : "❌"} (MAO: ${h.mao.toFixed(1)})</li>`;
             });
-
-            // バンクロールから1レース投入上限(U) を決定（<20,000円→3U固定 / ≥20,000円→bankroll×5%）
-            const bankrollEl = document.getElementById('bankrollInput');
-            const bankroll = bankrollEl ? (parseInt(bankrollEl.value) || 0) : 20000;
-            const capU = bankroll < 20000 ? 3 : Math.floor(bankroll * 0.05 / 100);
-
-            // 上限超過時は比例縮小（整数Uに丸め、合計が上限を超えないよう端数を高小数部から配分）
-            const rawTotal = rawUnits.reduce((a, b) => a + b, 0);
-            let finalUnits = rawUnits.slice();
-            let capped = false;
-            if (rawTotal > capU && rawTotal > 0) {
-                capped = true;
-                const factor = capU / rawTotal;
-                const scaled = rawUnits.map(u => u * factor);
-                finalUnits = scaled.map(Math.floor);
-                let rem = capU - finalUnits.reduce((a, b) => a + b, 0);
-                const order = scaled.map((s, i) => ({ i, frac: s - Math.floor(s) })).sort((a, b) => b.frac - a.frac);
-                for (let k = 0; k < order.length && rem > 0; k++) { finalUnits[order[k].i]++; rem--; }
-            }
-
-            res.winTargets.forEach((h, idx) => {
-                const u = finalUnits[idx];
-                const raw = rawUnits[idx];
-                const capMark = (capped && u !== raw) ? ` <span class="text-orange-400">(元${raw}U→${u}U)</span>` : "";
-                const dropMark = u === 0 ? ' <span class="text-red-400">(上限により見送り)</span>' : "";
-                winList.innerHTML += `<li class="font-bold text-yellow-300">馬番 ${h.umaban} [${h.cls}] : 推奨 ${u}U${capMark}${dropMark} / 期待値 ${h.ev.toFixed(3)} ${h.amberPassed ? "✅" : "❌"} (MAO: ${h.mao.toFixed(1)})</li>`;
-            });
-
-            const finalTotal = finalUnits.reduce((a, b) => a + b, 0);
-            let capNote = `<li class="mt-2 text-sm text-slate-300">💰 1レース投入: <strong>${finalTotal}U (${finalTotal * 100}円)</strong> ／ 上限 ${capU}U (${capU * 100}円)${capped ? ' <span class="text-orange-400">※上限キャップ適用（比例縮小）</span>' : ''}</li>`;
-            if (bankroll < 15000) {
-                capNote += `<li class="text-sm text-red-400 font-bold">⚠️ バンクロールが最低ライン 15,000円 を下回っています（運用停止を検討）</li>`;
-            }
-            winList.innerHTML += capNote;
         }
 
         // 3. Wide Targets
@@ -371,6 +417,98 @@ document.addEventListener('DOMContentLoaded', () => {
                 <td class="px-2 py-1 border-b border-slate-700 text-xs">${h.audit || '-'}</td>
             `;
             maoBody.appendChild(tr);
+        });
+
+        // === X Post Template Generation ===
+        const raceName = document.getElementById('raceTitle').textContent.trim();
+        const rec = res.recommendation;
+
+        let xLines = [];
+        xLines.push(`SS-ENGINE 出力 ▪ ${raceName}`);
+        xLines.push(`推奨度 ${rec}`);
+        xLines.push('');
+
+        // 単勝セクション
+        if (res.winTargets.length > 0) {
+            xLines.push('━━ 単勝 ━━');
+            res.winTargets.forEach(h => {
+                // 推奨度に基づくU数を算出
+                let recLevel = 'Low';
+                if (rec.includes('SSS')) recLevel = 'SSS';
+                else if (rec.includes('SS')) recLevel = 'SS';
+                else if (rec.includes('(S)')) recLevel = 'S';
+
+                let units = 0;
+                if (h.cls === 'A3') {
+                    if (recLevel === 'SSS') units = 6;
+                    else if (recLevel === 'SS') units = 5;
+                    else if (recLevel === 'S') units = 3;
+                    else units = 1;
+                } else if (h.cls === 'B2') {
+                    if (recLevel === 'SSS') units = 4;
+                    else if (recLevel === 'SS') units = 3;
+                    else if (recLevel === 'S') units = 2;
+                    else units = 1;
+                } else if (['A2', 'B1', 'D1', 'B3', 'X'].includes(h.cls)) {
+                    if (recLevel === 'SSS' || recLevel === 'SS') units = 2;
+                    else units = 1;
+                }
+
+                xLines.push(`${h.umaban} ${h.name} [${h.cls}] EV ${h.ev.toFixed(2)} / ${h.odds.toFixed(1)}倍 ${units}U`);
+            });
+        } else {
+            xLines.push('━━ 単勝 ━━');
+            xLines.push('対象馬なし');
+        }
+
+        // 軸（複勝）セクション
+        if (!res.skipReason && res.sanrenpuku.axis) {
+            xLines.push('');
+            xLines.push('━━ 軸（複勝）━━');
+            const ax = res.sanrenpuku.axis;
+            xLines.push(`${ax.umaban} ${ax.name} [${ax.cls}]`);
+        }
+
+        // 三連複セクション
+        if (!res.skipReason && res.sanrenpuku.axis) {
+            xLines.push('');
+            xLines.push('━━ 三連複 ━━');
+            const row1 = res.sanrenpuku.axis.umaban;
+            const row2 = res.sanrenpuku.row2.map(h => h.umaban).join(',');
+            const row3 = res.sanrenpuku.row3.map(h => h.umaban).join(',');
+            xLines.push(`${row1} - ${row2} - ${row3}`);
+        }
+
+        xLines.push('');
+        xLines.push('#競馬 #SS_ENGINE');
+
+        const xPostText = xLines.join('\n');
+        document.getElementById('xPostPreview').textContent = xPostText;
+
+        // Copy button handler
+        const copyBtn = document.getElementById('copyXPostBtn');
+        const copyStatus = document.getElementById('copyXPostStatus');
+        
+        // Remove old listener by cloning
+        const newCopyBtn = copyBtn.cloneNode(true);
+        copyBtn.parentNode.replaceChild(newCopyBtn, copyBtn);
+        
+        newCopyBtn.addEventListener('click', async () => {
+            try {
+                await navigator.clipboard.writeText(xPostText);
+                copyStatus.classList.remove('hidden');
+                setTimeout(() => copyStatus.classList.add('hidden'), 2000);
+            } catch (e) {
+                // Fallback for non-HTTPS
+                const ta = document.createElement('textarea');
+                ta.value = xPostText;
+                document.body.appendChild(ta);
+                ta.select();
+                document.execCommand('copy');
+                document.body.removeChild(ta);
+                copyStatus.classList.remove('hidden');
+                setTimeout(() => copyStatus.classList.add('hidden'), 2000);
+            }
         });
 
         resultsPanel.scrollIntoView({ behavior: 'smooth' });
