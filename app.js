@@ -354,16 +354,16 @@ document.addEventListener('DOMContentLoaded', () => {
                 if (h.cls === 'A3') {
                     if (recLevel === 'SSS') units = 6;
                     else if (recLevel === 'SS') units = 5;
-                    else if (recLevel === 'S') units = 3;
+                    else if (recLevel === 'S') units = 5; // S行をSS並みに引上げ（単勝特化バックテスト）
                     else units = 1; // Low
                 } else if (h.cls === 'B2') {
                     if (recLevel === 'SSS') units = 4;
                     else if (recLevel === 'SS') units = 3;
-                    else if (recLevel === 'S') units = 2;
+                    else if (recLevel === 'S') units = 3; // S行をSS並みに引上げ
                     else units = 1; // Low
                 } else if (['A2', 'B1', 'D1', 'B3', 'X'].includes(h.cls)) {
-                    if (recLevel === 'SSS' || recLevel === 'SS') units = 2;
-                    else units = 1; // S, Low
+                    if (recLevel === 'SSS' || recLevel === 'SS' || recLevel === 'S') units = 2; // S行をSS並みに引上げ
+                    else units = 1; // Low
                 }
                 
                 let unitStr = units > 0 ? `${units}U` : "0U";

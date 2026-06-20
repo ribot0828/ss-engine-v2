@@ -51,7 +51,7 @@ export function analyzeRace(horses, isGradeRace = false) {
         else if (rank === 'B' && ev >= 1.500 && ev <= 1.699) h.cls = 'B2';
         else if (rank === 'B' && ev >= 1.100 && ev <= 1.350) h.cls = 'B1';
         else if (rank === 'B' && ev >= 2.000 && ev <= 4.500) h.cls = 'B3';
-        else if (rank === 'A' && ev >= 1.500 && ev <= 1.999) h.cls = 'A3'; // A3新設
+        else if (rank === 'A' && ev >= 1.500 && ev <= 1.699) h.cls = 'A3'; // A3: analyzer.jsに整合（旧1.999→1.699。バックテスト検証レンジに一致）
         else if (rank === 'A' && ev >= 1.000 && ev <= 1.250) h.cls = 'A2';
         else if (rank === 'D' && ev >= 1.300 && ev <= 1.799) h.cls = 'D1';
         else h.cls = 'N';
