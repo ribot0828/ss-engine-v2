@@ -133,7 +133,7 @@ export function analyzeRace(horses, isGradeRace = false) {
 
     // 5. 投資プロトコル計算
     // ① 単勝 (WIN) - Kelly基準に基づく安定型序列（A・B評価重視）
-    const WIN_PRIORITY = ['A3', 'B2', 'A2', 'B1', 'D1', 'B3', 'X'];
+    const WIN_PRIORITY = ['A3', 'B2', 'A2', 'D1', 'B1', 'B3', 'X']; // [10] Kelly比 D1>B1
     const strikerWallFilter = (h) => {
         if (h.umaban >= 13 && (h.cls === 'A1' || h.cls === 'S2' || h.cls === 'A0')) return false;
         
@@ -166,7 +166,7 @@ export function analyzeRace(horses, isGradeRace = false) {
     // ② ワイド (Insurance) 
     // ユーザ指定により軸不在時は単勝のみ
     let wideTargets = [];
-    let sanrenpuku = { axis: null, row2: [], row3: [] };
+    let sanrenpuku = { axis: null, row2: [], combos: [] };
 
     if (hasAxis && !skipReason) {
         // Axis selection
@@ -186,21 +186,18 @@ export function analyzeRace(horses, isGradeRace = false) {
         // Wide candidates: Ver.5.29にてワイド生成は無効化（オフ）
         let wideOpponents = [];
 
-        // ③ 三連複
-        // 2nd line
-        const defPrio = ['S0', 'S1', 'S2', 'A0', 'B0+', 'A1', 'B0']; 
+        // ③ 三連複（軸1頭ながし方式）[12]
+        // 相手(row2): Place-Core系から防御ソートで最大2頭 + Win-Core系から攻撃ソートで最大1頭
+        const defPrio = ['S0', 'S1', 'S2', 'A0', 'B0+', 'A1', 'B0'];
         let row2Def = [];
         for (const pCls of defPrio) {
             let matching = horses.filter(h => h.cls === pCls && h.umaban !== axisHorse.umaban);
             matching.sort(sortDefense);
             row2Def.push(...matching);
         }
-        
-        // S系優先（S0,S1,S2はすでにdefPrioの最初にあるのでOK）
         row2Def = row2Def.slice(0, 2); // 最大2頭
 
-        // 三連複2列目（攻撃枠）- Win-Core優先順位同期（Ver.5.29）
-        const TRIO_ATTACK_PRIORITY = ['A3', 'B2', 'A2', 'B1', 'D1', 'B3', 'X'];
+        const TRIO_ATTACK_PRIORITY = ['A3', 'B2', 'A2', 'D1', 'B1', 'B3', 'X']; // [10] D1>B1
         let row2Atk = [];
         for (const pCls of TRIO_ATTACK_PRIORITY) {
             let matching = horses.filter(h => h.cls === pCls && h.umaban !== axisHorse.umaban);
@@ -209,44 +206,28 @@ export function analyzeRace(horses, isGradeRace = false) {
         }
         row2Atk = row2Atk.slice(0, 1); // 最大1頭
 
-        sanrenpuku.row2 = [...row2Def, ...row2Atk];
-
-        // 3rd line - 最適化済み抽出ロジック
-        let finalRow3 = [];
-        const r3Used = new Set();
-
-        // 重複・軸馬を除外しつつ追加するヘルパー
-        const addToRow3 = (hList) => {
-            for (const h of hList) {
-                if (h.umaban !== axisHorse.umaban && !r3Used.has(h.umaban)) {
-                    r3Used.add(h.umaban);
-                    finalRow3.push(h);
-                }
+        // 相手（最大3頭・軸/重複を除外）
+        let mates = [];
+        for (const h of [...row2Def, ...row2Atk]) {
+            if (h.umaban !== axisHorse.umaban && !mates.some(m => m.umaban === h.umaban)) {
+                mates.push(h);
             }
-        };
+        }
+        sanrenpuku.row2 = mates;
 
-        // 1. 2列目（row2）に選ばれた全馬（そのまま追加）
-        addToRow3(sanrenpuku.row2);
+        // 買い目生成: 軸を必ず含み、相手から2頭 = 軸 × C(相手,2)。網は撤廃。上限3点
+        let combos = [];
+        for (let i = 0; i < mates.length; i++) {
+            for (let j = i + 1; j < mates.length; j++) {
+                combos.push([axisHorse.umaban, mates[i].umaban, mates[j].umaban].sort((a, b) => a - b));
+            }
+        }
+        // 相手1頭以下なら買い目なし（実質スキップ）
+        sanrenpuku.combos = combos; // 各要素=[a,b,c]昇順。最大3点
 
-        // 2. 評価Sの全馬（ただしNクラスは除外 / sortDefense）
-        let sRanked = horses.filter(h => h.rank === 'S' && h.cls !== 'N');
-        sRanked.sort(sortDefense);
-        addToRow3(sRanked);
-
-        // 3. Place-Core系の全馬（sortDefense）
-        const defenseRemClasses = new Set(['S0', 'S1', 'S2', 'A0', 'B0+', 'A1', 'B0']);
-        let defenseRem = horses.filter(h => defenseRemClasses.has(h.cls));
-        defenseRem.sort(sortDefense);
-        addToRow3(defenseRem);
-
-        // 3. Win-Core系の全馬（sortAttack）
-        let atkAll = horses.filter(h => TRIO_ATTACK_PRIORITY.includes(h.cls));
-        atkAll.sort(sortAttack);
-        addToRow3(atkAll);
-
-        // ※絶対ルール※ Nクラスは一切含めない（完全排除）
-
-        sanrenpuku.row3 = finalRow3.slice(0, 10);
+        // 自己検査: 全買い目に軸を含む & 点数<=3
+        if (combos.some(c => !c.includes(axisHorse.umaban))) console.error('[三連複] 軸欠落の買い目を検出');
+        if (combos.length > 3) console.error('[三連複] 点数が3を超過');
     }
 
     return {

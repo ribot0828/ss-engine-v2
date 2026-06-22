@@ -354,16 +354,20 @@ document.addEventListener('DOMContentLoaded', () => {
                 if (h.cls === 'A3') {
                     if (recLevel === 'SSS') units = 6;
                     else if (recLevel === 'SS') units = 5;
-                    else if (recLevel === 'S') units = 5; // S行をSS並みに引上げ（単勝特化バックテスト）
+                    else if (recLevel === 'S') units = 5;
                     else units = 1; // Low
                 } else if (h.cls === 'B2') {
-                    if (recLevel === 'SSS') units = 4;
-                    else if (recLevel === 'SS') units = 3;
-                    else if (recLevel === 'S') units = 3; // S行をSS並みに引上げ
+                    if (recLevel === 'SSS') units = 3;       // [9] B2適正化
+                    else if (recLevel === 'SS') units = 2;
+                    else if (recLevel === 'S') units = 2;
                     else units = 1; // Low
-                } else if (['A2', 'B1', 'D1', 'B3', 'X'].includes(h.cls)) {
-                    if (recLevel === 'SSS' || recLevel === 'SS' || recLevel === 'S') units = 2; // S行をSS並みに引上げ
+                } else if (h.cls === 'A2') {
+                    if (recLevel === 'SSS' || recLevel === 'SS' || recLevel === 'S') units = 2;
                     else units = 1; // Low
+                } else if (h.cls === 'B1') {
+                    units = 1; // [8] B1は全推奨度1U固定
+                } else if (['D1', 'B3', 'X'].includes(h.cls)) {
+                    units = 1; // 1U固定（Kellyのfloor）
                 }
                 
                 let unitStr = units > 0 ? `${units}U` : "0U";
@@ -382,12 +386,12 @@ document.addEventListener('DOMContentLoaded', () => {
             sanList.innerHTML = `<li class="text-slate-400">購入見送り</li>`;
         } else {
             const row1 = res.sanrenpuku.axis.umaban;
-            const row2 = res.sanrenpuku.row2.map(h => h.umaban).join(', ');
-            const row3 = res.sanrenpuku.row3.map(h => h.umaban).join(', ');
+            const mates = res.sanrenpuku.row2.map(h => h.umaban).join(', ');
+            const combos = (res.sanrenpuku.combos || []).map(c => c.join('-'));
             sanList.innerHTML += `
-               <li><strong class="text-purple-400">1列目 (軸):</strong> ${row1}</li>
-               <li><strong class="text-blue-400">2列目 (相手):</strong> ${row2 || 'なし'}</li>
-               <li><strong class="text-gray-300">3列目 (網):</strong> ${row3 || 'なし'}</li>
+               <li><strong class="text-purple-400">軸:</strong> ${row1}</li>
+               <li><strong class="text-blue-400">相手:</strong> ${mates || 'なし'}</li>
+               <li><strong class="text-gray-300">買い目 (${combos.length}点):</strong> ${combos.join(' / ') || 'なし'}</li>
             `;
         }
 
