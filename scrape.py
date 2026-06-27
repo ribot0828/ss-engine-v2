@@ -255,10 +255,9 @@ class handler(BaseHTTPRequestHandler):
                     if not time_span:
                         continue
 
-                    race_line_div = col.find('div', class_='race_line')
-                    rl_text = race_line_div.get_text() if race_line_div else ""
-
-                    if not any(t in rl_text for t in JRA_TRACKS):
+                    rc_div = col.find('div', class_='rc')
+                    rc_text = rc_div.get_text().strip() if rc_div else ""
+                    if not any(t in rc_text for t in JRA_TRACKS):
                         continue
 
                     past_cls_raw = ""
@@ -266,8 +265,9 @@ class handler(BaseHTTPRequestHandler):
                     if r_class_div and r_class_div.get_text().strip():
                         past_cls_raw = r_class_div.get_text().strip()
                     else:
+                        race_line_div = col.find('div', class_='race_line')
                         if race_line_div:
-                            rl_match = re.search(r'([1-3]勝ク(?:ラス)?|未勝利|新馬|OP|オープン|GⅠ|GⅡ|GⅢ|G[1-3])', rl_text)
+                            rl_match = re.search(r'([1-3]勝ク(?:ラス)?|未勝利|新馬|OP|オープン|GⅠ|GⅡ|GⅢ|G[1-3])', race_line_div.get_text())
                             if rl_match:
                                 past_cls_raw = rl_match.group(1)
 
