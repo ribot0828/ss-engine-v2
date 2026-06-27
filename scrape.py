@@ -94,12 +94,28 @@ class handler(BaseHTTPRequestHandler):
 
         # 5. グレード (レース条件ブロックのみ探索。ナビメニューの「GⅠ」を拾わないようにする)
         grade_info = ""
-        grade_pattern = r'(GⅠ|GⅡ|GⅢ|G[1-3]|Jpn[1-3]|Jpn[ⅠⅡⅢ]|(?<![a-zA-Z])L(?![a-zA-Z])|OP|オープン|[1-3]勝クラス|未勝利|新馬)'
-        for search_text in [race_name, soup.find('h2').get_text() if soup.find('h2') else ""]:
+        grade_pattern = r'(GⅠ|GⅡ|GⅢ|G[1-3]|Jpn[1-3]|Jpn[ⅠⅡⅢ]|(?<![a-zA-Z])L(?![a-zA-Z])|OP|オープン|[1-3]勝クラス|[1-3]勝ク(?!ラス)|未勝利|新馬)'
+        # 探索対象: レース名 → h2 → div.type(条件ブロック) → div.cell(class属性)
+        type_div = soup.find('div', class_='type')
+        class_cell = soup.find('div', class_='cell')
+        search_sources = [
+            race_name,
+            soup.find('h2').get_text() if soup.find('h2') else "",
+            type_div.get_text() if type_div else "",
+        ]
+        # div.cell の中に「勝クラス」等を含むものを探す
+        for div in soup.find_all('div', class_='cell'):
+            ct = div.get_text().strip()
+            if re.search(r'(勝クラス|勝ク|OP|オープン|新馬|未勝利)', ct):
+                search_sources.append(ct)
+                break
+        for search_text in search_sources:
             grade_match = re.search(grade_pattern, search_text, re.IGNORECASE)
             if grade_match:
                 grade_info = grade_match.group(1)
                 grade_info = grade_info.replace('Ⅰ', '1').replace('Ⅱ', '2').replace('Ⅲ', '3').replace('オープン', 'OP')
+                if grade_info.endswith('勝ク'):
+                    grade_info = grade_info + 'ラス'
                 if grade_info not in ('OP', 'L') and not grade_info[0].isdigit():
                     grade_info = grade_info.upper()
                 break
