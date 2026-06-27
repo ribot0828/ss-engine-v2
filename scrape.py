@@ -216,6 +216,70 @@ class handler(BaseHTTPRequestHandler):
                     except Exception:
                         pass
 
+        # 7. 近走監査 (D評価1.0秒ルール)
+        #    Table 3 (narrow-xy s_table) の過去レース列から
+        #    同クラス＆着差≤1.0秒のレースがあれば passedStrikerValidation=True
+        def normalize_class(c):
+            c = re.sub(r'^[牝牡]', '', c.strip())
+            c = re.sub(r'勝クラス|勝ク', '勝', c)
+            return c
+
+        current_cls_norm = normalize_class(grade_info) if grade_info else ""
+        detail_tbl = None
+        for t in soup.find_all('table', class_='s_table'):
+            if 'narrow-xy' in (t.get('class') or []):
+                detail_tbl = t
+                break
+
+        if detail_tbl and current_cls_norm:
+            for row in detail_tbl.find_all('tr')[1:]:
+                cols = row.find_all('td')
+                if len(cols) < 6:
+                    continue
+                try:
+                    umaban = int(re.sub(r'\D', '', cols[1].get_text().strip()))
+                except (ValueError, IndexError):
+                    continue
+
+                horse = next((h for h in horses if h['umaban'] == umaban), None)
+                if not horse:
+                    continue
+
+                passed = False
+                # 過去レース列: cols[6]〜cols[9] (前走〜4走前、最大5走だがJRAは4走まで)
+                for ci in range(6, min(10, len(cols))):
+                    col = cols[ci]
+                    time_span = col.find('span', class_='time')
+                    if not time_span:
+                        continue
+
+                    # クラス取得: r_class → 空なら race_line からフォールバック
+                    past_cls_raw = ""
+                    r_class_div = col.find('div', class_='r_class')
+                    if r_class_div and r_class_div.get_text().strip():
+                        past_cls_raw = r_class_div.get_text().strip()
+                    else:
+                        race_line_div = col.find('div', class_='race_line')
+                        if race_line_div:
+                            rl_text = race_line_div.get_text()
+                            rl_match = re.search(r'([1-3]勝ク(?:ラス)?|未勝利|新馬|OP|オープン|GⅠ|GⅡ|GⅢ|G[1-3])', rl_text)
+                            if rl_match:
+                                past_cls_raw = rl_match.group(1)
+
+                    if not past_cls_raw:
+                        continue
+                    if normalize_class(past_cls_raw) != current_cls_norm:
+                        continue
+
+                    margin_m = re.search(r'[(（]([\d.]+)[)）]', time_span.get_text())
+                    if margin_m:
+                        margin = float(margin_m.group(1))
+                        if margin <= 1.0:
+                            passed = True
+                            break
+
+                horse['passedStrikerValidation'] = passed
+
         return {
             "race_name": race_name, "venue": venue, "race_num": race_num,
             "course_info": course_info, "grade_info": grade_info,
