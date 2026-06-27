@@ -219,6 +219,8 @@ class handler(BaseHTTPRequestHandler):
         # 7. 近走監査 (D評価1.0秒ルール)
         #    Table 3 (narrow-xy s_table) の過去レース列から
         #    同クラス＆着差≤1.0秒のレースがあれば passedStrikerValidation=True
+        JRA_TRACKS = {"札幌", "函館", "福島", "新潟", "東京", "中山", "中京", "京都", "阪神", "小倉"}
+
         def normalize_class(c):
             c = re.sub(r'^[牝牡]', '', c.strip())
             c = re.sub(r'勝クラス|勝ク', '勝', c)
@@ -253,15 +255,18 @@ class handler(BaseHTTPRequestHandler):
                     if not time_span:
                         continue
 
-                    # クラス取得: r_class → 空なら race_line からフォールバック
+                    race_line_div = col.find('div', class_='race_line')
+                    rl_text = race_line_div.get_text() if race_line_div else ""
+
+                    if not any(t in rl_text for t in JRA_TRACKS):
+                        continue
+
                     past_cls_raw = ""
                     r_class_div = col.find('div', class_='r_class')
                     if r_class_div and r_class_div.get_text().strip():
                         past_cls_raw = r_class_div.get_text().strip()
                     else:
-                        race_line_div = col.find('div', class_='race_line')
                         if race_line_div:
-                            rl_text = race_line_div.get_text()
                             rl_match = re.search(r'([1-3]勝ク(?:ラス)?|未勝利|新馬|OP|オープン|GⅠ|GⅡ|GⅢ|G[1-3])', rl_text)
                             if rl_match:
                                 past_cls_raw = rl_match.group(1)
