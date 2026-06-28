@@ -353,19 +353,18 @@ document.addEventListener('DOMContentLoaded', () => {
                 else if (res.recommendation.includes('(S)')) recLevel = 'S';
 
                 let units = 0;
-                if (h.cls === 'A3') {
+                if (recLevel === 'Low') {
+                    units = 0; // Low推奨度は全スキップ
+                } else if (h.cls === 'A3') {
                     if (recLevel === 'SSS') units = 6;
                     else if (recLevel === 'SS') units = 5;
-                    else if (recLevel === 'S') units = 5;
-                    else units = 1; // Low
+                    else units = 5; // S
                 } else if (h.cls === 'B2') {
                     if (recLevel === 'SSS') units = 3;       // [9] B2適正化
                     else if (recLevel === 'SS') units = 2;
-                    else if (recLevel === 'S') units = 2;
-                    else units = 1; // Low
+                    else units = 2; // S
                 } else if (h.cls === 'A2') {
-                    if (recLevel === 'SSS' || recLevel === 'SS' || recLevel === 'S') units = 2;
-                    else units = 1; // Low
+                    units = 2; // SSS/SS/S共通
                 } else if (h.cls === 'B1') {
                     units = 1; // [8] B1は全推奨度1U固定
                 } else if (['D1', 'B3', 'X'].includes(h.cls)) {

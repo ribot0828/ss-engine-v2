@@ -81,9 +81,15 @@ export function analyzeRace(horses, isGradeRace = false) {
     else if (ssDensity >= 0.150) recommendation = '🔥 (S)';
     else recommendation = '⚠️ (Low)';
 
+    // Low推奨度は全スキップ（単勝・三連複とも0U）
+    const isLow = recommendation.includes('Low');
+    // S推奨度は三連複スキップ（単勝のみ執行）
+    const isSRec = recommendation.includes('(S)') && !recommendation.includes('SS');
+
     let skipReason = null;
     const requiredDensity = isGradeRace ? 0.100 : 0.150;
     if (!hasAxis) skipReason = '軸不在（単勝のみ執行可）';
+    else if (isSRec) skipReason = 'S推奨度（単勝のみ執行）';
     else if (ssDensity < requiredDensity) skipReason = `低密度 (SS密度 ${ssDensity} < ${requiredDensity})`;
 
     // タイブレークソート関数群
@@ -147,13 +153,15 @@ export function analyzeRace(horses, isGradeRace = false) {
     };
     
     let strikerCandidates = [];
-    for (const pCls of WIN_PRIORITY) {
-        let matching = horses.filter(h => h.cls === pCls && strikerWallFilter(h));
-        matching.sort(sortAttack);
-        strikerCandidates.push(...matching);
+    if (!isLow) {
+        for (const pCls of WIN_PRIORITY) {
+            let matching = horses.filter(h => h.cls === pCls && strikerWallFilter(h));
+            matching.sort(sortAttack);
+            strikerCandidates.push(...matching);
+        }
     }
-    
-    // MAO Passed only
+
+    // MAO Passed only (Low推奨度は空配列=全スキップ)
     const winTargets = strikerCandidates.filter(h => h.amberPassed).slice(0, 2);
     
     // ユニット配分（Ver.5.29）
@@ -168,7 +176,7 @@ export function analyzeRace(horses, isGradeRace = false) {
     let wideTargets = [];
     let sanrenpuku = { axis: null, row2: [], combos: [] };
 
-    if (hasAxis && !skipReason) {
+    if (hasAxis && !skipReason && !isLow) {
         // Axis selection
         const axisPrio = ['S0', 'S1', 'S2', 'A0', 'B0+', 'A1', 'B0'];
         let axisHorse = null;
