@@ -112,6 +112,7 @@ document.addEventListener('DOMContentLoaded', () => {
             lastFetchedUrl = item.url;
             urlInput.value = item.url;
             document.getElementById('raceTitle').textContent = item.raceName;
+            document.getElementById('raceVenue').textContent = item.venue || "";
             document.getElementById('raceCourse').textContent = item.courseInfo;
             currentHorses = JSON.parse(JSON.stringify(item.horses));
             isGradeRace = item.isGradeRace || false;
@@ -169,6 +170,7 @@ document.addEventListener('DOMContentLoaded', () => {
             if (data.error) throw new Error(data.error);
 
             document.getElementById('raceTitle').textContent = data.race_name || "出馬表";
+            document.getElementById('raceVenue').textContent = data.venue || "";
             document.getElementById('raceCourse').textContent = data.course_info || "";
             
             savedGradeInfo = data.grade_info || "";
@@ -646,7 +648,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const sanrentanPay = getPay('3連単');
 
         let csvContent = '\uFEFF';
-        csvContent += "日付,レース名,コース詳細,グレード・頭数,馬番,馬名,購入時人気,購入時オッズ,評価,購入時期待値,購入時クラス,近走監査,最終確定人気,最終確定オッズ,最終確定期待値,最終確定クラス,着順,MAO,実行フラグ,単勝払戻,ワイド払戻,馬連払戻,三連複払戻,三連単払戻\r\n";
+        csvContent += "日付,開催場所,レース名,コース詳細,グレード・頭数,馬番,馬名,購入時人気,購入時オッズ,評価,購入時期待値,購入時クラス,近走監査,最終確定人気,最終確定オッズ,最終確定期待値,最終確定クラス,着順,MAO,実行フラグ,単勝払戻,ワイド払戻,馬連払戻,三連複払戻,三連単払戻\r\n";
 
         // ▼ 追加: CSVを破壊する文字（改行、カンマ）をスペースに置換する関数
         const sanitize = (val) => {
@@ -655,8 +657,9 @@ document.addEventListener('DOMContentLoaded', () => {
         };
 
         currentHorses.sort((a,b) => a.umaban - b.umaban).forEach(h => {
+             const venueStr = (currentVenue || "-").replace(/,/g, '');
              const rawRow = [
-                 dateStr, raceName, courseInfo, gradeStr, h.umaban, h.name,
+                 dateStr, venueStr, raceName, courseInfo, gradeStr, h.umaban, h.name,
                  h.popular || "-", h.odds ? h.odds.toFixed(1) : "0.0",
                  h.rank, h.ev ? h.ev.toFixed(3) : "0.000", h.cls || "N",
                  // 近走監査ステータス

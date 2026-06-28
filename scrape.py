@@ -334,6 +334,13 @@ class handler(BaseHTTPRequestHandler):
             t = re.sub(r'\s+', ' ', t)
             course_info = re.sub(r'^[0-9]+:[0-9]+\s*発走\s*/\s*', '', t).split('特集')[0].strip()
 
+        venue = ""
+        venue_elem = soup.select_one(".RaceData02") or soup.select_one(".RaceKaisaiData")
+        if venue_elem:
+            vm = re.search(r'\d+回(\S+?)\d+日', venue_elem.get_text())
+            if vm:
+                venue = vm.group(1)
+
         grade_info = ""
         # 1. 優先アプローチ: <title>タグから抽出 (SEOフォーマットのため最も信頼性が高い)
         if soup.title and soup.title.string:
@@ -476,7 +483,7 @@ class handler(BaseHTTPRequestHandler):
                     elif '3連単' in tn or '３連単' in tn: payouts['3連単'] = pairs
 
         return {
-            "race_name": race_name, "venue": "", "race_num": "",
+            "race_name": race_name, "venue": venue, "race_num": "",
             "course_info": course_info, "grade_info": grade_info, 
             "date_info": date_info,
             "horses": sorted(horses, key=lambda x: x["umaban"]), 
