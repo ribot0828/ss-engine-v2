@@ -1,5 +1,5 @@
 // CSVエクスポート（Excel用・BOM付きCRLF）
-export function exportCsv({ raceName, courseInfo, gradeStr, dateStr, horses, lastResultData }) {
+export function exportCsv({ raceName, venueStr, courseInfo, gradeStr, dateStr, horses, lastResultData }) {
     const getPay = (key) => {
         if (lastResultData && lastResultData.payouts && lastResultData.payouts[key]) {
             const arr = lastResultData.payouts[key];
@@ -18,7 +18,7 @@ export function exportCsv({ raceName, courseInfo, gradeStr, dateStr, horses, las
     const sanrentanPay = getPay('3連単');
 
     let csvContent = '\uFEFF';
-    csvContent += "日付,レース名,コース詳細,グレード・頭数,馬番,馬名,購入時人気,購入時オッズ,評価,購入時期待値,購入時クラス,近走監査,最終確定人気,最終確定オッズ,最終確定期待値,最終確定クラス,着順,MAO,実行フラグ,単勝払戻,ワイド払戻,馬連払戻,三連複払戻,三連単払戻\r\n";
+    csvContent += "日付,開催場所,レース名,コース詳細,グレード・頭数,馬番,馬名,購入時人気,購入時オッズ,評価,購入時期待値,購入時クラス,近走監査,最終確定人気,最終確定オッズ,最終確定期待値,最終確定クラス,着順,MAO,実行フラグ,単勝払戻,ワイド払戻,馬連払戻,三連複払戻,三連単払戻\r\n";
 
     // ▼ 追加: CSVを破壊する文字（改行、カンマ）をスペースに置換する関数
     const sanitize = (val) => {
@@ -28,7 +28,7 @@ export function exportCsv({ raceName, courseInfo, gradeStr, dateStr, horses, las
 
     horses.sort((a, b) => a.umaban - b.umaban).forEach(h => {
         const rawRow = [
-            dateStr, raceName, courseInfo, gradeStr, h.umaban, h.name,
+            dateStr, venueStr, raceName, courseInfo, gradeStr, h.umaban, h.name,
             h.popular || "-", h.odds ? h.odds.toFixed(1) : "0.0",
             h.rank, h.ev ? h.ev.toFixed(3) : "0.000", h.cls || "N",
             // 近走監査ステータス

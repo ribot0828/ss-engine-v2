@@ -10,15 +10,15 @@ const ATTACK_PRIORITY = ['A3', 'B2', 'A2', 'D1', 'B1', 'B3', 'X'];
 const DEFENSE_PRIORITY = ['S0', 'S1', 'S2', 'A0', 'B0+', 'A1', 'B0'];
 const DEFENSE_SET = new Set(DEFENSE_PRIORITY);
 
-// 単勝ユニット配分表（推奨度レベル × クラス別）[8][9] Ver.5.29 相当
+// 単勝ユニット配分表（推奨度レベル × クラス別）[8][9] Low推奨度は全スキップ(0U)
 const UNIT_TABLE = {
-    'A3': { SSS: 6, SS: 5, S: 5, Low: 1 },
-    'B2': { SSS: 3, SS: 2, S: 2, Low: 1 }, // [9] B2適正化
-    'A2': { SSS: 2, SS: 2, S: 2, Low: 1 },
-    'B1': { SSS: 1, SS: 1, S: 1, Low: 1 }, // [8] B1は全推奨度1U固定
-    'D1': { SSS: 1, SS: 1, S: 1, Low: 1 }, // 1U固定（Kellyのfloor）
-    'B3': { SSS: 1, SS: 1, S: 1, Low: 1 },
-    'X':  { SSS: 1, SS: 1, S: 1, Low: 1 },
+    'A3': { SSS: 6, SS: 5, S: 5, Low: 0 },
+    'B2': { SSS: 3, SS: 2, S: 2, Low: 0 }, // [9] B2適正化
+    'A2': { SSS: 2, SS: 2, S: 2, Low: 0 }, // SSS/SS/S共通
+    'B1': { SSS: 1, SS: 1, S: 1, Low: 0 }, // [8] B1は全推奨度1U固定
+    'D1': { SSS: 1, SS: 1, S: 1, Low: 0 }, // 1U固定（Kellyのfloor）
+    'B3': { SSS: 1, SS: 1, S: 1, Low: 0 },
+    'X':  { SSS: 1, SS: 1, S: 1, Low: 0 },
 };
 
 // 小数点第3位以下切り捨て (厳密な生データ比較を維持)
@@ -97,9 +97,15 @@ export function analyzeRace(horses, isGradeRace = false) {
     else if (ssDensity >= 0.150) recommendation = '🔥 (S)';
     else recommendation = '⚠️ (Low)';
 
+    // Low推奨度は全スキップ（単勝・三連複とも0U）
+    const isLow = recommendation.includes('Low');
+    // S推奨度は三連複スキップ（単勝のみ執行）
+    const isSRec = recommendation.includes('(S)') && !recommendation.includes('SS');
+
     let skipReason = null;
     const requiredDensity = isGradeRace ? 0.100 : 0.150;
     if (!hasAxis) skipReason = '軸不在（単勝のみ執行可）';
+    else if (isSRec) skipReason = 'S推奨度（単勝のみ執行）';
     else if (ssDensity < requiredDensity) skipReason = `低密度 (SS密度 ${ssDensity} < ${requiredDensity})`;
 
     // タイブレークソート関数群
@@ -172,9 +178,9 @@ export function analyzeRace(horses, isGradeRace = false) {
         return true;
     };
 
-    const strikerCandidates = pickByPriority(horses, ATTACK_PRIORITY, sortAttack, strikerWallFilter);
+    const strikerCandidates = isLow ? [] : pickByPriority(horses, ATTACK_PRIORITY, sortAttack, strikerWallFilter);
 
-    // MAO Passed only
+    // MAO Passed only (Low推奨度は空配列=全スキップ)
     const winTargets = strikerCandidates.filter(h => h.amberPassed).slice(0, 2);
 
     // ユニット配分（推奨度レベル×クラス別。旧 logic.js 側の h.unit（死にデータ）を廃止し、
@@ -194,7 +200,7 @@ export function analyzeRace(horses, isGradeRace = false) {
     let wideTargets = [];
     let sanrenpuku = { axis: null, row2: [], combos: [] };
 
-    if (hasAxis && !skipReason) {
+    if (hasAxis && !skipReason && !isLow) {
         // Axis selection
         let axisHorse = null;
         for (const pCls of DEFENSE_PRIORITY) {

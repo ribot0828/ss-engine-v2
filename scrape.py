@@ -38,11 +38,277 @@ class handler(BaseHTTPRequestHandler):
             return
 
         try:
-            data = self.scrape_netkeiba(url)
+            if 'jra.jp' in url or 'jra.go.jp' in url:
+                data = self.scrape_jra(url)
+            else:
+                data = self.scrape_netkeiba(url)
             self.wfile.write(json.dumps(data).encode('utf-8'))
         except Exception as e:
             self.wfile.write(json.dumps({"error": "Scraping failed: " + str(e)}).encode('utf-8'))
         return
+
+    def scrape_jra(self, url):
+        # SP版に正規化 (PC版 www.jra.go.jp は403を返すため)
+        url = url.replace('www.jra.go.jp', 'sp.jra.jp').replace('http://', 'https://')
+        if 'sp.jra.jp' not in url:
+            url = re.sub(r'https?://[^/]*jra[^/]*/', 'https://sp.jra.jp/', url)
+
+        headers = {"User-Agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1"}
+        res = requests.get(url, headers=headers, timeout=15)
+        text = res.content.decode('cp932', errors='replace')
+        soup = BeautifulSoup(text, 'html.parser')
+
+        # 1. レース名
+        race_name_el = soup.find('span', class_='race_name')
+        race_name = race_name_el.get_text().strip() if race_name_el else ""
+
+        # 2. 日付 + 会場 (div.cell.date = "2026年6月27日（土曜） 2回福島1日")
+        date_info = ""
+        venue = ""
+        date_cell = soup.find('div', class_='cell')
+        for div in soup.find_all('div', class_='cell'):
+            t = div.get_text().strip()
+            dm = re.search(r'(\d{4})年(\d{1,2})月(\d{1,2})日', t)
+            if dm:
+                date_info = f"{dm.group(1)}-{dm.group(2).zfill(2)}-{dm.group(3).zfill(2)}"
+                vm = re.search(r'\d+回(\S+)\d+日', t)
+                if vm:
+                    venue = vm.group(1)
+                break
+
+        if not date_info:
+            date_info = datetime.now().strftime("%Y-%m-%d")
+
+        # 3. コース情報 (div.cell.course = "コース：1,800 メートル （芝・右）")
+        course_info = ""
+        course_cell = soup.find('div', class_='course')
+        if not course_cell:
+            for div in soup.find_all('div'):
+                if 'コース' in (div.get_text() or '') and 'メートル' in (div.get_text() or ''):
+                    course_cell = div
+                    break
+        if course_cell:
+            ct = re.sub(r'\s+', ' ', course_cell.get_text(separator=' ')).strip()
+            ct = ct.replace('コース：', '').replace('コース ：', '').strip()
+            dist_m = re.search(r'([\d,]+)\s*メートル', ct)
+            detail_m = re.search(r'[（(]([^）)]+)[）)]', ct)
+            if dist_m and detail_m:
+                dist = dist_m.group(1).replace(',', '')
+                course_info = f"{dist}m {detail_m.group(1)}"
+            elif dist_m:
+                course_info = f"{dist_m.group(1).replace(',', '')}m"
+            else:
+                course_info = ct
+
+        # 4. レース番号 (div.btn_race_select = "2回福島1日 7R")
+        race_num = ""
+        race_sel = soup.find('div', class_='btn_race_select')
+        if race_sel:
+            nm = re.search(r'(\d+)R', race_sel.get_text())
+            if nm:
+                race_num = nm.group(1) + "R"
+
+        # 5. グレード (レース条件ブロックのみ探索。ナビメニューの「GⅠ」を拾わないようにする)
+        grade_info = ""
+        grade_pattern = r'(GⅠ|GⅡ|GⅢ|G[1-3]|Jpn[1-3]|Jpn[ⅠⅡⅢ]|(?<![a-zA-Z])L(?![a-zA-Z])|OP|オープン|[1-3]勝クラス|[1-3]勝ク(?!ラス)|未勝利|新馬)'
+        # 探索対象: レース名 → h2 → div.type(条件ブロック) → div.cell(class属性)
+        type_div = soup.find('div', class_='type')
+        class_cell = soup.find('div', class_='cell')
+        search_sources = [
+            race_name,
+            soup.find('h2').get_text() if soup.find('h2') else "",
+            type_div.get_text() if type_div else "",
+        ]
+        # div.cell の中に「勝クラス」等を含むものを探す
+        for div in soup.find_all('div', class_='cell'):
+            ct = div.get_text().strip()
+            if re.search(r'(勝クラス|勝ク|OP|オープン|新馬|未勝利)', ct):
+                search_sources.append(ct)
+                break
+        for search_text in search_sources:
+            grade_match = re.search(grade_pattern, search_text, re.IGNORECASE)
+            if grade_match:
+                grade_info = grade_match.group(1)
+                grade_info = grade_info.replace('Ⅰ', '1').replace('Ⅱ', '2').replace('Ⅲ', '3').replace('オープン', 'OP')
+                if grade_info.endswith('勝ク'):
+                    grade_info = grade_info + 'ラス'
+                if grade_info not in ('OP', 'L') and not grade_info[0].isdigit():
+                    grade_info = grade_info.upper()
+                break
+        if not grade_info:
+            grade_info = "一般"
+
+        # 6. 馬リスト (Table: class=s_table, narrow-xyなし = モバイル用簡易テーブル)
+        #    Col0: div.num=馬番, div.horse=馬名
+        #    Col1: div.odds=オッズ
+        horses = []
+        seen_umaban = set()
+
+        tbl = None
+        for t in soup.find_all('table', class_='s_table'):
+            if 'narrow-xy' not in (t.get('class') or []):
+                tbl = t
+                break
+
+        if tbl:
+            for row in tbl.find_all('tr')[1:]:
+                cols = row.find_all('td')
+                if len(cols) < 2:
+                    continue
+                try:
+                    num_div = cols[0].find('div', class_='num')
+                    horse_div = cols[0].find('div', class_='horse')
+                    odds_div = cols[1].find('div', class_='odds')
+
+                    if not num_div:
+                        continue
+                    umaban_txt = re.sub(r'\D', '', num_div.get_text().strip())
+                    if not umaban_txt:
+                        continue
+                    umaban = int(umaban_txt)
+                    name = horse_div.get_text().strip() if horse_div else "不明"
+
+                    odds = 0.0
+                    if odds_div:
+                        odds_txt = odds_div.get_text().strip().replace(',', '')
+                        try:
+                            odds = float(odds_txt)
+                        except ValueError:
+                            odds = 0.0
+
+                    if umaban in seen_umaban:
+                        continue
+                    seen_umaban.add(umaban)
+                    horses.append({
+                        "umaban": umaban, "name": name, "horse_id": "",
+                        "odds": odds, "popular": "", "rank": "B",
+                        "placing": "", "audit": "-"
+                    })
+                except Exception:
+                    pass
+
+        # ページがレースページでない場合(JRAトップに飛ばされた等)
+        if not horses and not race_name:
+            return {
+                "error": "JRAの出馬表が見つかりませんでした。URLを確認してください。",
+                "race_name": "", "venue": "", "race_num": "",
+                "course_info": "", "grade_info": "", "date_info": date_info,
+                "horses": [], "payouts": {}, "odds_unavailable": True
+            }
+
+        # フォールバック: s_tableが空なら narrow-xy s_table (Table 3) を試行
+        if not horses:
+            for t in soup.find_all('table', class_='s_table'):
+                if 'narrow-xy' in (t.get('class') or []):
+                    tbl = t
+                    break
+            if tbl:
+                for row in tbl.find_all('tr')[1:]:
+                    cols = row.find_all('td')
+                    if len(cols) < 4:
+                        continue
+                    try:
+                        umaban = int(re.sub(r'\D', '', cols[1].get_text().strip()))
+                        name_raw = cols[2].get_text(separator='|').strip()
+                        name = name_raw.split('|')[0].strip()
+
+                        odds_raw = cols[3].get_text().strip()
+                        odds_m = re.search(r'[\d.]+', odds_raw.replace(',', ''))
+                        odds = float(odds_m.group(0)) if odds_m else 0.0
+
+                        pop = ""
+                        pop_m = re.search(r'[(（](\d+)\s*番人気', odds_raw)
+                        if pop_m:
+                            pop = pop_m.group(1)
+
+                        if umaban in seen_umaban:
+                            continue
+                        seen_umaban.add(umaban)
+                        horses.append({
+                            "umaban": umaban, "name": name, "horse_id": "",
+                            "odds": odds, "popular": pop, "rank": "B",
+                            "placing": "", "audit": "-"
+                        })
+                    except Exception:
+                        pass
+
+        # 7. 近走監査 (D評価1.0秒ルール)
+        #    Table 3 (narrow-xy s_table) の過去レース列から
+        #    同クラス＆着差≤1.0秒のレースがあれば passedStrikerValidation=True
+        JRA_TRACKS = {"札幌", "函館", "福島", "新潟", "東京", "中山", "中京", "京都", "阪神", "小倉"}
+
+        def normalize_class(c):
+            c = re.sub(r'^[牝牡]', '', c.strip())
+            c = re.sub(r'勝クラス|勝ク', '勝', c)
+            return c
+
+        current_cls_norm = normalize_class(grade_info) if grade_info else ""
+        detail_tbl = None
+        for t in soup.find_all('table', class_='s_table'):
+            if 'narrow-xy' in (t.get('class') or []):
+                detail_tbl = t
+                break
+
+        if detail_tbl and current_cls_norm:
+            for row in detail_tbl.find_all('tr')[1:]:
+                cols = row.find_all('td')
+                if len(cols) < 6:
+                    continue
+                try:
+                    umaban = int(re.sub(r'\D', '', cols[1].get_text().strip()))
+                except (ValueError, IndexError):
+                    continue
+
+                horse = next((h for h in horses if h['umaban'] == umaban), None)
+                if not horse:
+                    continue
+
+                passed = False
+                # 過去レース列: cols[6]〜cols[9] (前走〜4走前、最大5走だがJRAは4走まで)
+                for ci in range(6, min(10, len(cols))):
+                    col = cols[ci]
+                    time_span = col.find('span', class_='time')
+                    if not time_span:
+                        continue
+
+                    rc_div = col.find('div', class_='rc')
+                    rc_text = rc_div.get_text().strip() if rc_div else ""
+                    if not any(t in rc_text for t in JRA_TRACKS):
+                        continue
+
+                    past_cls_raw = ""
+                    r_class_div = col.find('div', class_='r_class')
+                    if r_class_div and r_class_div.get_text().strip():
+                        past_cls_raw = r_class_div.get_text().strip()
+                    else:
+                        race_line_div = col.find('div', class_='race_line')
+                        if race_line_div:
+                            rl_match = re.search(r'([1-3]勝ク(?:ラス)?|未勝利|新馬|OP|オープン|GⅠ|GⅡ|GⅢ|G[1-3])', race_line_div.get_text())
+                            if rl_match:
+                                past_cls_raw = rl_match.group(1)
+
+                    if not past_cls_raw:
+                        continue
+                    if normalize_class(past_cls_raw) != current_cls_norm:
+                        continue
+
+                    margin_m = re.search(r'[(（]([\d.]+)[)）]', time_span.get_text())
+                    if margin_m:
+                        margin = float(margin_m.group(1))
+                        if margin <= 1.0:
+                            passed = True
+                            break
+
+                horse['passedStrikerValidation'] = passed
+
+        return {
+            "race_name": race_name, "venue": venue, "race_num": race_num,
+            "course_info": course_info, "grade_info": grade_info,
+            "date_info": date_info,
+            "horses": sorted(horses, key=lambda x: x["umaban"]),
+            "payouts": {},
+            "odds_unavailable": not any(h["odds"] > 0 for h in horses)
+        }
 
     def normalize_url(self, url):
         """スマホ版URLをPC版に強制変換し、(正規化後URL, is_result)を返す"""
@@ -80,6 +346,13 @@ class handler(BaseHTTPRequestHandler):
             t = re.sub(r'\s+', ' ', t)
             course_info = re.sub(r'^[0-9]+:[0-9]+\s*発走\s*/\s*', '', t).split('特集')[0].strip()
 
+        venue = ""
+        venue_elem = soup.select_one(".RaceData02") or soup.select_one(".RaceKaisaiData")
+        if venue_elem:
+            vm = re.search(r'\d+回(\S+?)\d+日', venue_elem.get_text())
+            if vm:
+                venue = vm.group(1)
+
         grade_info = ""
         # 1. 優先アプローチ: <title>タグから抽出 (SEOフォーマットのため最も信頼性が高い)
         if soup.title and soup.title.string:
@@ -94,7 +367,7 @@ class handler(BaseHTTPRequestHandler):
         if not grade_info:
             grade_info = "一般"
 
-        return race_name, date_info, course_info, grade_info
+        return race_name, date_info, course_info, grade_info, venue
 
     def parse_result_horses(self, soup):
         """結果ページから馬リストを抽出"""
@@ -233,7 +506,7 @@ class handler(BaseHTTPRequestHandler):
         soup = BeautifulSoup(res.text, 'html.parser')
 
         # 2. メタ情報の抽出
-        race_name, date_info, course_info, grade_info = self.extract_meta(soup)
+        race_name, date_info, course_info, grade_info, venue = self.extract_meta(soup)
 
         # 3. 馬リストの抽出
         if is_result:
@@ -249,7 +522,7 @@ class handler(BaseHTTPRequestHandler):
         payouts = self.parse_payouts(soup)
 
         return {
-            "race_name": race_name, "venue": "", "race_num": "",
+            "race_name": race_name, "venue": venue, "race_num": "",
             "course_info": course_info, "grade_info": grade_info,
             "date_info": date_info,
             "horses": sorted(horses, key=lambda x: x["umaban"]),

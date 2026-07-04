@@ -107,6 +107,7 @@ document.addEventListener('DOMContentLoaded', () => {
             lastFetchedUrl = item.url;
             urlInput.value = item.url;
             document.getElementById('raceTitle').textContent = item.raceName;
+            document.getElementById('raceVenue').textContent = item.venue || "";
             document.getElementById('raceCourse').textContent = item.courseInfo;
             currentHorses = JSON.parse(JSON.stringify(item.horses));
             isGradeRace = item.isGradeRace || false;
@@ -157,6 +158,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const data = await fetchRaceData(url);
 
             document.getElementById('raceTitle').textContent = data.race_name || "出馬表";
+            document.getElementById('raceVenue').textContent = data.venue || "";
             document.getElementById('raceCourse').textContent = data.course_info || "";
 
             savedGradeInfo = data.grade_info || "";
@@ -524,7 +526,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
         let dateStr = savedDateInfo ? savedDateInfo.replace(/,/g, '').trim() : new Date().toISOString().split('T')[0];
 
-        exportCsv({ raceName, courseInfo, gradeStr, dateStr, horses: currentHorses, lastResultData });
+        exportCsv({ raceName, venueStr: (currentVenue || "-").replace(/,/g, ''), courseInfo, gradeStr, dateStr, horses: currentHorses, lastResultData });
 
         // ▼ 追加: CSV出力が完了したことを履歴に記録し、UIを更新する
         if (markExported(lastFetchedUrl)) {
