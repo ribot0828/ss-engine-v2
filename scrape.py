@@ -6,12 +6,28 @@ from bs4 import BeautifulSoup
 import re
 from datetime import datetime
 
+# グレード抽出用の共通正規表現（title由来 / RaceData01由来の両ブロックで使用）
+# ローマ数字（Ⅰ, Ⅱ, Ⅲ）および単独のL（境界チェック付）に対応
+GRADE_PATTERN = r'(G[1-3]|G[ⅠⅡⅢ]|Jpn[1-3]|Jpn[ⅠⅡⅢ]|(?<![a-zA-Z])L(?![a-zA-Z])|OP|オープン|[1-3]勝クラス|未勝利|新馬)'
+
+
+def extract_grade(text):
+    """テキストからグレード表記を抽出し、正規化した文字列を返す。見つからなければ空文字。"""
+    grade_match = re.search(GRADE_PATTERN, text, re.IGNORECASE)
+    if not grade_match:
+        return ""
+    grade_info = grade_match.group(1).upper()
+    # ローマ数字をアラビア数字に変換
+    grade_info = grade_info.replace('Ⅰ', '1').replace('Ⅱ', '2').replace('Ⅲ', '3').replace('オープン', 'OP')
+    return grade_info
+
+
 class handler(BaseHTTPRequestHandler):
     def do_GET(self):
         parsed_path = urllib.parse.urlparse(self.path)
         query_components = urllib.parse.parse_qs(parsed_path.query)
         url = query_components.get('url', [None])[0]
-        
+
         self.send_response(200)
         self.send_header('Content-type', 'application/json')
         self.send_header('Access-Control-Allow-Origin', '*')
@@ -28,24 +44,20 @@ class handler(BaseHTTPRequestHandler):
             self.wfile.write(json.dumps({"error": "Scraping failed: " + str(e)}).encode('utf-8'))
         return
 
-    def scrape_netkeiba(self, url):
-        # 1. URLの正規化 (スマホ版をPC版に強制変換)
+    def normalize_url(self, url):
+        """スマホ版URLをPC版に強制変換し、(正規化後URL, is_result)を返す"""
         match = re.search(r'race_id=(\d+)', url)
         race_id = match.group(1) if match else None
         is_result = 'result.html' in url or 'pid=race_result' in url
-        
+
         if race_id:
             page_type = 'result' if is_result else 'shutuba'
             url = f"https://race.netkeiba.com/race/{page_type}.html?race_id={race_id}"
 
-        headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"}
-        res = requests.get(url, headers=headers)
-        # netkeibaはページ・時期によりUTF-8/EUC-JPが混在するため、エンコーディングを
-        # ハードコードせずバイト列から自動判定する（UTF-8移行による文字化け対策）
-        res.encoding = res.apparent_encoding or res.encoding
-        soup = BeautifulSoup(res.text, 'html.parser')
+        return url, is_result
 
-        # 2. メタ情報の抽出
+    def extract_meta(self, soup):
+        """race_name / date_info / course_info / grade_info をまとめて抽出"""
         name_elem = soup.select_one(".RaceName") or soup.select_one(".Race_Name") or soup.select_one("h1.RaceName")
         race_name = name_elem.get_text().strip() if name_elem else ""
 
@@ -56,7 +68,7 @@ class handler(BaseHTTPRequestHandler):
             date_match = re.search(r'(\d{4})年(\d{1,2})月(\d{1,2})日', title_text)
             if date_match:
                 date_info = f"{date_match.group(1)}-{date_match.group(2).zfill(2)}-{date_match.group(3).zfill(2)}"
-        
+
         if not date_info:
             date_info = datetime.now().strftime("%Y-%m-%d")
         # ------------------------
@@ -71,99 +83,97 @@ class handler(BaseHTTPRequestHandler):
         grade_info = ""
         # 1. 優先アプローチ: <title>タグから抽出 (SEOフォーマットのため最も信頼性が高い)
         if soup.title and soup.title.string:
-            title_text = soup.title.string
-            # ローマ数字（Ⅰ, Ⅱ, Ⅲ）および単独のL（境界チェック付）に対応した正規表現
-            grade_match = re.search(r'(G[1-3]|G[ⅠⅡⅢ]|Jpn[1-3]|Jpn[ⅠⅡⅢ]|(?<![a-zA-Z])L(?![a-zA-Z])|OP|オープン|[1-3]勝クラス|未勝利|新馬)', title_text, re.IGNORECASE)
-            if grade_match:
-                grade_info = grade_match.group(1).upper()
-                # ローマ数字をアラビア数字に変換
-                grade_info = grade_info.replace('Ⅰ', '1').replace('Ⅱ', '2').replace('Ⅲ', '3').replace('オープン', 'OP')
-        
+            grade_info = extract_grade(soup.title.string)
+
         # 2. セカンドアプローチ: タイトルにない場合のみ、特定の詳細ブロックを検索
         if not grade_info:
             race_data_block = soup.find('div', class_='RaceData01') or soup.find('div', class_='RaceList_Item02')
             if race_data_block:
-                block_text = race_data_block.get_text()
-                # 単独のL（境界チェック付）にも対応した正規表現
-                grade_match = re.search(r'(G[1-3]|G[ⅠⅡⅢ]|Jpn[1-3]|Jpn[ⅠⅡⅢ]|(?<![a-zA-Z])L(?![a-zA-Z])|OP|オープン|[1-3]勝クラス|未勝利|新馬)', block_text, re.IGNORECASE)
-                if grade_match:
-                    grade_info = grade_match.group(1).upper()
-                    grade_info = grade_info.replace('Ⅰ', '1').replace('Ⅱ', '2').replace('Ⅲ', '3').replace('オープン', 'OP')
-        
+                grade_info = extract_grade(race_data_block.get_text())
+
         if not grade_info:
             grade_info = "一般"
 
-        # 3. 馬リストの抽出
+        return race_name, date_info, course_info, grade_info
+
+    def parse_result_horses(self, soup):
+        """結果ページから馬リストを抽出"""
         horses = []
         seen_umaban = set()
 
-        if is_result:
-            table = soup.select_one(".ResultTable") or soup.select_one("table[summary='全着順']")
-            if table:
-                # 1. ヘッダーから列のインデックスを動的に取得
-                header_elems = table.select("th")
-                headers = [th.get_text().strip() for th in header_elems]
-                umaban_idx = 2
-                pop_idx = 9
-                odds_idx = 10
-                
-                for i, h in enumerate(headers):
-                    if '馬番' in h: umaban_idx = i
-                    elif '人気' in h: pop_idx = i
-                    elif '単勝' in h: odds_idx = i
+        table = soup.select_one(".ResultTable") or soup.select_one("table[summary='全着順']")
+        if table:
+            # 1. ヘッダーから列のインデックスを動的に取得
+            header_elems = table.select("th")
+            headers = [th.get_text().strip() for th in header_elems]
+            umaban_idx = 2
+            pop_idx = 9
+            odds_idx = 10
 
-                # 2. 取得したインデックスを使って安全にデータを抽出
-                for row in table.select("tr"):
-                    cols = row.select("td")
-                    if len(cols) <= max(umaban_idx, pop_idx, odds_idx): continue
-                    try:
-                        umaban_txt = cols[umaban_idx].get_text().strip()
-                        umaban = int(re.sub(r'\D', '', umaban_txt))
-                        
-                        name_a = row.select_one("a[href*='/horse/']")
-                        name = name_a.get_text().strip().replace('\n', ' ') if name_a else "不明"
-                        hid = re.search(r'/horse/(\d+)', name_a['href']).group(1) if name_a else "不明"
-                        
-                        # 改行をスペースに置換してCSV破壊を防ぐ
-                        pop = cols[pop_idx].get_text().strip().replace('\n', ' ')
-                        odds_txt = cols[odds_idx].get_text().strip().replace(',', '').replace('---.-', '0.0').replace('\n', ' ')
-                        
-                        try:
-                            odds = float(odds_txt)
-                        except ValueError:
-                            odds = 0.0
+            for i, h in enumerate(headers):
+                if '馬番' in h: umaban_idx = i
+                elif '人気' in h: pop_idx = i
+                elif '単勝' in h: odds_idx = i
 
-                        if umaban in seen_umaban: continue
-                        seen_umaban.add(umaban)
-                        horses.append({
-                            "umaban": umaban, "name": name, "horse_id": hid, 
-                            "odds": odds, "popular": pop, "rank": "B", 
-                            "placing": cols[0].get_text().strip().replace('\n', ' '), "audit": "-"
-                        })
-                    except Exception as e:
-                        pass
-        else:
-            for row in soup.select(".HorseList"):
+            # 2. 取得したインデックスを使って安全にデータを抽出
+            for row in table.select("tr"):
+                cols = row.select("td")
+                if len(cols) <= max(umaban_idx, pop_idx, odds_idx): continue
                 try:
-                    num_e = row.select_one("td[class^='Umaban']") or row.select_one(".Umaban") or row.select_one(".Horse_Num")
-                    if not num_e: continue
-                    umaban = int(re.sub(r'\D', '', num_e.get_text().strip()))
-                    name_a = row.select_one(".HorseName a") or row.select_one("a[href*='/horse/']")
-                    name = name_a.get_text().strip()
-                    hid = re.search(r'/horse/(\d+)', name_a['href']).group(1)
-                    odds_e = row.select_one(".Odds") or row.select_one("td.Txt_R")
-                    odds = float(odds_e.get_text().strip().replace('---.-', '0.0')) if odds_e else 0.0
-                    
+                    umaban_txt = cols[umaban_idx].get_text().strip()
+                    umaban = int(re.sub(r'\D', '', umaban_txt))
+
+                    name_a = row.select_one("a[href*='/horse/']")
+                    name = name_a.get_text().strip().replace('\n', ' ') if name_a else "不明"
+                    hid = re.search(r'/horse/(\d+)', name_a['href']).group(1) if name_a else "不明"
+
+                    # 改行をスペースに置換してCSV破壊を防ぐ
+                    pop = cols[pop_idx].get_text().strip().replace('\n', ' ')
+                    odds_txt = cols[odds_idx].get_text().strip().replace(',', '').replace('---.-', '0.0').replace('\n', ' ')
+
+                    try:
+                        odds = float(odds_txt)
+                    except ValueError:
+                        odds = 0.0
+
                     if umaban in seen_umaban: continue
                     seen_umaban.add(umaban)
-                    horses.append({"umaban": umaban, "name": name, "horse_id": hid, "odds": odds, "popular": "", "rank": "B", "placing": "", "audit": "-"})
-                except: pass
+                    horses.append({
+                        "umaban": umaban, "name": name, "horse_id": hid,
+                        "odds": odds, "popular": pop, "rank": "B",
+                        "placing": cols[0].get_text().strip().replace('\n', ' '), "audit": "-"
+                    })
+                except Exception:
+                    continue
 
-        # 4. 近走監査はアプリ側の手動チェック（passedStrikerValidation）で行うため、
-        #    サーバー側の自動監査（馬1頭ごとのnetkeiba直列アクセス）は廃止。
-        #    "audit" 列は各馬のデフォルト値 "-" のまま返す。
+        return horses
 
-        # 5. 払戻金の取得
+    def parse_shutuba_horses(self, soup):
+        """出馬表ページから馬リストを抽出"""
+        horses = []
+        seen_umaban = set()
+
+        for row in soup.select(".HorseList"):
+            try:
+                num_e = row.select_one("td[class^='Umaban']") or row.select_one(".Umaban") or row.select_one(".Horse_Num")
+                if not num_e: continue
+                umaban = int(re.sub(r'\D', '', num_e.get_text().strip()))
+                name_a = row.select_one(".HorseName a") or row.select_one("a[href*='/horse/']")
+                name = name_a.get_text().strip()
+                hid = re.search(r'/horse/(\d+)', name_a['href']).group(1)
+                odds_e = row.select_one(".Odds") or row.select_one("td.Txt_R")
+                odds = float(odds_e.get_text().strip().replace('---.-', '0.0')) if odds_e else 0.0
+
+                if umaban in seen_umaban: continue
+                seen_umaban.add(umaban)
+                horses.append({"umaban": umaban, "name": name, "horse_id": hid, "odds": odds, "popular": "", "rank": "B", "placing": "", "audit": "-"})
+            except Exception:
+                continue
+
+        return horses
+
+    def parse_payouts(self, soup):
+        """払戻金テーブルを抽出"""
         payouts = {}
         for tbl in (soup.select('.Payout_Detail_Table') or soup.select('.Payout_Table')):
             for tr in tbl.select('tr'):
@@ -175,7 +185,7 @@ class handler(BaseHTTPRequestHandler):
                     # 組み合わせの抽出 (tds[0])
                     raw_nums = re.findall(r'\b\d+\b', tds[0].get_text(separator=' '))
                     nums = [n for n in raw_nums if n.isdigit()]
-                    
+
                     # 金額の抽出 (tds[1])
                     payout_html = str(tds[1])
                     payout_html = re.sub(r'<br\s*/?>', '|', payout_html)
@@ -186,7 +196,7 @@ class handler(BaseHTTPRequestHandler):
                         clean_str = re.sub(r'[^\d]', '', x)
                         if clean_str:
                             amounts.append(int(clean_str))
-                            
+
                     # ペアの作成（金額の件数で馬番を分割・ハイフン結合）
                     pairs = []
                     if amounts and nums:
@@ -195,7 +205,7 @@ class handler(BaseHTTPRequestHandler):
                             for i in range(len(amounts)):
                                 combo = "-".join(nums[i * chunk_size : (i + 1) * chunk_size])
                                 pairs.append({"combo": combo, "amount": amounts[i]})
-                    
+
                     # 万が一パースできなかった場合のフォールバック
                     if not pairs and len(tds) >= 2:
                          fallback_val = tds[1].get_text(separator=' ').strip().replace('\n', ' ')
@@ -209,11 +219,40 @@ class handler(BaseHTTPRequestHandler):
                     elif '3連複' in tn or '３連複' in tn: payouts['3連複'] = pairs
                     elif '3連単' in tn or '３連単' in tn: payouts['3連単'] = pairs
 
+        return payouts
+
+    def scrape_netkeiba(self, url):
+        # 1. URLの正規化 (スマホ版をPC版に強制変換)
+        url, is_result = self.normalize_url(url)
+
+        headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"}
+        res = requests.get(url, headers=headers)
+        # netkeibaはページ・時期によりUTF-8/EUC-JPが混在するため、エンコーディングを
+        # ハードコードせずバイト列から自動判定する（UTF-8移行による文字化け対策）
+        res.encoding = res.apparent_encoding or res.encoding
+        soup = BeautifulSoup(res.text, 'html.parser')
+
+        # 2. メタ情報の抽出
+        race_name, date_info, course_info, grade_info = self.extract_meta(soup)
+
+        # 3. 馬リストの抽出
+        if is_result:
+            horses = self.parse_result_horses(soup)
+        else:
+            horses = self.parse_shutuba_horses(soup)
+
+        # 4. 近走監査はアプリ側の手動チェック（passedStrikerValidation）で行うため、
+        #    サーバー側の自動監査（馬1頭ごとのnetkeiba直列アクセス）は廃止。
+        #    "audit" 列は各馬のデフォルト値 "-" のまま返す。
+
+        # 5. 払戻金の取得
+        payouts = self.parse_payouts(soup)
+
         return {
             "race_name": race_name, "venue": "", "race_num": "",
-            "course_info": course_info, "grade_info": grade_info, 
+            "course_info": course_info, "grade_info": grade_info,
             "date_info": date_info,
-            "horses": sorted(horses, key=lambda x: x["umaban"]), 
+            "horses": sorted(horses, key=lambda x: x["umaban"]),
             "payouts": payouts,
             "odds_unavailable": not any(h["odds"] > 0 for h in horses)
         }
