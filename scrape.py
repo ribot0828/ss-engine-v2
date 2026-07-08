@@ -193,6 +193,7 @@ class handler(BaseHTTPRequestHandler):
                 "error": "JRAの出馬表が見つかりませんでした。URLを確認してください。",
                 "race_name": "", "venue": "", "race_num": "",
                 "course_info": "", "grade_info": "", "date_info": date_info,
+                "start_time": "", "weather": "", "baba": "",
                 "horses": [], "payouts": {}, "odds_unavailable": True
             }
 
@@ -305,6 +306,7 @@ class handler(BaseHTTPRequestHandler):
             "race_name": race_name, "venue": venue, "race_num": race_num,
             "course_info": course_info, "grade_info": grade_info,
             "date_info": date_info,
+            "start_time": "", "weather": "", "baba": "",
             "horses": sorted(horses, key=lambda x: x["umaban"]),
             "payouts": {},
             "odds_unavailable": not any(h["odds"] > 0 for h in horses)
@@ -341,10 +343,24 @@ class handler(BaseHTTPRequestHandler):
 
         course_elem = soup.select_one(".RaceData01") or soup.select_one(".Race_Name_Box")
         course_info = ""
+        start_time = ""
+        weather = ""
+        baba = ""
         if course_elem:
             t = course_elem.get_text(separator=' ').strip()
             t = re.sub(r'\s+', ' ', t)
             course_info = re.sub(r'^[0-9]+:[0-9]+\s*発走\s*/\s*', '', t).split('特集')[0].strip()
+
+            # 発走時刻・天候・馬場の抽出（RaceData01例: 「15:45発走 / 芝1200m (右) / 天候:小雨 / 馬場:重」）
+            time_match = re.search(r'(\d{1,2}:\d{2})\s*発走', t)
+            if time_match:
+                start_time = time_match.group(1)
+            weather_match = re.search(r'天候:([^\s/]+)', t)
+            if weather_match:
+                weather = weather_match.group(1)
+            baba_match = re.search(r'馬場:([^\s/]+)', t)
+            if baba_match:
+                baba = baba_match.group(1)
 
         venue = ""
         venue_elem = soup.select_one(".RaceData02") or soup.select_one(".RaceKaisaiData")
@@ -367,7 +383,7 @@ class handler(BaseHTTPRequestHandler):
         if not grade_info:
             grade_info = "一般"
 
-        return race_name, date_info, course_info, grade_info, venue
+        return race_name, date_info, course_info, grade_info, venue, start_time, weather, baba
 
     def parse_result_horses(self, soup):
         """結果ページから馬リストを抽出"""
@@ -382,11 +398,19 @@ class handler(BaseHTTPRequestHandler):
             umaban_idx = 2
             pop_idx = 9
             odds_idx = 10
+            time_idx = -1
+            margin_idx = -1
+            agari_idx = -1
+            passage_idx = -1
 
             for i, h in enumerate(headers):
                 if '馬番' in h: umaban_idx = i
                 elif '人気' in h: pop_idx = i
                 elif '単勝' in h: odds_idx = i
+                elif h == 'タイム': time_idx = i  # 「後3F」等との誤マッチ防止のため完全一致
+                elif '着差' in h: margin_idx = i
+                elif '後3F' in h or '上り' in h: agari_idx = i
+                elif 'コーナー' in h: passage_idx = i
 
             # 2. 取得したインデックスを使って安全にデータを抽出
             for row in table.select("tr"):
@@ -409,12 +433,19 @@ class handler(BaseHTTPRequestHandler):
                     except ValueError:
                         odds = 0.0
 
+                    # タイム・着差・後3F・コーナー通過順（列が見つからない場合は空文字）
+                    time_val = cols[time_idx].get_text().strip().replace('\n', ' ') if time_idx != -1 and time_idx < len(cols) else ""
+                    margin_val = cols[margin_idx].get_text().strip().replace('\n', ' ') if margin_idx != -1 and margin_idx < len(cols) else ""
+                    agari_val = cols[agari_idx].get_text().strip().replace('\n', ' ') if agari_idx != -1 and agari_idx < len(cols) else ""
+                    passage_val = cols[passage_idx].get_text().strip().replace('\n', ' ') if passage_idx != -1 and passage_idx < len(cols) else ""
+
                     if umaban in seen_umaban: continue
                     seen_umaban.add(umaban)
                     horses.append({
                         "umaban": umaban, "name": name, "horse_id": hid,
                         "odds": odds, "popular": pop, "rank": "B",
-                        "placing": cols[0].get_text().strip().replace('\n', ' '), "audit": "-"
+                        "placing": cols[0].get_text().strip().replace('\n', ' '), "audit": "-",
+                        "time": time_val, "margin": margin_val, "agari": agari_val, "passage": passage_val
                     })
                 except Exception:
                     continue
@@ -506,7 +537,7 @@ class handler(BaseHTTPRequestHandler):
         soup = BeautifulSoup(res.text, 'html.parser')
 
         # 2. メタ情報の抽出
-        race_name, date_info, course_info, grade_info, venue = self.extract_meta(soup)
+        race_name, date_info, course_info, grade_info, venue, start_time, weather, baba = self.extract_meta(soup)
 
         # 3. 馬リストの抽出
         if is_result:
@@ -525,6 +556,7 @@ class handler(BaseHTTPRequestHandler):
             "race_name": race_name, "venue": venue, "race_num": "",
             "course_info": course_info, "grade_info": grade_info,
             "date_info": date_info,
+            "start_time": start_time, "weather": weather, "baba": baba,
             "horses": sorted(horses, key=lambda x: x["umaban"]),
             "payouts": payouts,
             "odds_unavailable": not any(h["odds"] > 0 for h in horses)

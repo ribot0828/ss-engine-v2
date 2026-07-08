@@ -1,5 +1,7 @@
 // SS-Engine Ver.5.22 Core Logic
 
+export const LOGIC_VERSION = "v5.32";
+
 const SCORE_MAP = {
     'S': 100, 'A': 65, 'B': 40, 'C': 20, 'D': 10, 'E': 3, 'F': 0.5
 };

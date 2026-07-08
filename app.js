@@ -32,6 +32,10 @@ document.addEventListener('DOMContentLoaded', () => {
     let currentRaceNum = "";
     let autoUpdateInterval = null;
     let currentXPostText = "";
+    let raceStartTime = "";
+    let oddsUpdatedAt = null;
+    let raceWeather = "";
+    let raceBaba = "";
 
     const showError = (msg) => {
         if (!msg) {
@@ -167,6 +171,11 @@ document.addEventListener('DOMContentLoaded', () => {
             currentVenue = data.venue || "";
             currentRaceNum = data.race_num || "";
 
+            raceStartTime = data.start_time || "";
+            oddsUpdatedAt = new Date();
+            raceWeather = data.weather || "";
+            raceBaba = data.baba || "";
+
             currentHorses = data.horses.sort((a,b) => a.umaban - b.umaban);
 
             // フェールセーフ: odds と rank の型を保証
@@ -211,6 +220,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
         try {
             const data = await fetchRaceData(lastFetchedUrl, { errorMsg: "オッズの取得に失敗", checkDataError: false });
+            oddsUpdatedAt = new Date();
 
             let updatedCount = 0;
             data.horses.forEach(newHorse => {
@@ -260,6 +270,7 @@ document.addEventListener('DOMContentLoaded', () => {
         if (e.target.matches('.odds-input')) {
             const idx = parseInt(e.target.dataset.idx);
             currentHorses[idx].odds = parseFloat(e.target.value) || 0;
+            oddsUpdatedAt = new Date();
         } else if (e.target.matches('.rank-select')) {
             const idx = parseInt(e.target.dataset.idx);
             currentHorses[idx].rank = e.target.value;
@@ -452,6 +463,11 @@ document.addEventListener('DOMContentLoaded', () => {
             }
             if (data.date_info) savedDateInfo = data.date_info;
 
+            // 結果ページの発走時刻・天候・馬場（＝レース時点の実況値）を優先して上書き
+            if (data.start_time) raceStartTime = data.start_time;
+            if (data.weather) raceWeather = data.weather;
+            if (data.baba) raceBaba = data.baba;
+
             // ▼ 修正: グレードと頭数をUIに強制セット（同期）
             let finalGrade = "";
             if (data.grade_info && data.grade_info !== "一般" && data.grade_info.trim() !== "") {
@@ -475,6 +491,11 @@ document.addEventListener('DOMContentLoaded', () => {
                     target.placing = resHorse.placing || "";
                     target.finalOdds = parseFloat(resHorse.odds) || 0;
                     target.finalPopular = resHorse.popular || "";
+                    // タイム・着差・後3F・コーナー通過順（既存プロパティとの衝突回避のためresult接頭辞）
+                    target.resultTime = resHorse.time || "";
+                    target.resultMargin = resHorse.margin || "";
+                    target.resultAgari = resHorse.agari || "";
+                    target.resultPassage = resHorse.passage || "";
                     mergedCount++;
                 }
             });
@@ -526,7 +547,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
         let dateStr = savedDateInfo ? savedDateInfo.replace(/,/g, '').trim() : new Date().toISOString().split('T')[0];
 
-        exportCsv({ raceName, venueStr: (currentVenue || "-").replace(/,/g, ''), courseInfo, gradeStr, dateStr, horses: currentHorses, lastResultData });
+        exportCsv({ raceName, venueStr: (currentVenue || "-").replace(/,/g, ''), courseInfo, gradeStr, dateStr, horses: currentHorses, lastResultData, raceStartTime, oddsUpdatedAt, raceWeather, raceBaba });
 
         // ▼ 追加: CSV出力が完了したことを履歴に記録し、UIを更新する
         if (markExported(lastFetchedUrl)) {
