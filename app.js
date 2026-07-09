@@ -1,9 +1,9 @@
 // SS-Engine アプリケーション オーケストレーション（DOM配線・描画）
-import { analyzeRace } from './logic.js?v=5.38.0';
-import { fetchRaceData } from './api.js?v=5.38.0';
-import { loadHistory, getHistory, saveHistory, deleteHistory, markExported } from './history.js?v=5.38.0';
-import { buildXPostText } from './xpost.js?v=5.38.0';
-import { exportCsv } from './csv.js?v=5.38.0';
+import { analyzeRace } from './logic.js?v=5.39.0';
+import { fetchRaceData } from './api.js?v=5.39.0';
+import { loadHistory, getHistory, saveHistory, deleteHistory, markExported } from './history.js?v=5.39.0';
+import { buildXPostText } from './xpost.js?v=5.39.0';
+import { exportCsv } from './csv.js?v=5.39.0';
 
 document.addEventListener('DOMContentLoaded', () => {
     const fetchBtn = document.getElementById('fetchBtn');
@@ -329,10 +329,15 @@ document.addEventListener('DOMContentLoaded', () => {
         winList.innerHTML = "";
         if (res.winTargets.length === 0) {
             winList.innerHTML = `<li class="text-slate-400">対象馬なし</li>`;
+            winList.innerHTML += `<li class="text-slate-500 text-xs">小資金（残高2万円未満）: ノーベット</li>`;
         } else {
-            res.winTargets.forEach(h => {
+            res.winTargets.forEach((h, idx) => {
                 const unitStr = h.unit > 0 ? `${h.unit}U` : "0U";
-                winList.innerHTML += `<li class="font-bold text-yellow-300">馬番 ${h.umaban} [${h.cls}] : 推奨 ${unitStr} / 期待値 ${h.ev.toFixed(3)} ${h.amberPassed ? "✅" : "❌"} (MAO: ${h.mao.toFixed(1)})</li>`;
+                const normalAlloc = `${unitStr}(${h.unit * 100}円)`;
+                // 小資金モード配分: 単勝優先順位（ATTACK_PRIORITY順）で並ぶ winTargets の先頭1点のみ 3U(300円) を集中、他は "-"
+                const smallFundAlloc = idx === 0 ? `3U(300円)★` : `-`;
+                winList.innerHTML += `<li class="font-bold text-yellow-300">馬番 ${h.umaban} [${h.cls}] : 推奨 ${unitStr} / 期待値 ${h.ev.toFixed(3)} ${h.amberPassed ? "✅" : "❌"} (MAO: ${h.mao.toFixed(1)})
+                    <div class="font-normal text-xs text-slate-300 mt-0.5">通常: ${normalAlloc} ｜ 小資金: ${smallFundAlloc}</div></li>`;
             });
         }
 
