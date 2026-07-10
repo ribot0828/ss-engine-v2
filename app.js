@@ -1,9 +1,9 @@
 // SS-Engine アプリケーション オーケストレーション（DOM配線・描画）
-import { analyzeRace } from './logic.js?v=5.39.0';
-import { fetchRaceData } from './api.js?v=5.39.0';
-import { loadHistory, getHistory, saveHistory, deleteHistory, markExported } from './history.js?v=5.39.0';
-import { buildXPostText } from './xpost.js?v=5.39.0';
-import { exportCsv } from './csv.js?v=5.39.0';
+import { analyzeRace } from './logic.js?v=5.40.0';
+import { fetchRaceData, isVenueRacePattern, resolveRaceUrl } from './api.js?v=5.40.0';
+import { loadHistory, getHistory, saveHistory, deleteHistory, markExported } from './history.js?v=5.40.0';
+import { buildXPostText } from './xpost.js?v=5.40.0';
+import { exportCsv } from './csv.js?v=5.40.0';
 
 document.addEventListener('DOMContentLoaded', () => {
     const fetchBtn = document.getElementById('fetchBtn');
@@ -148,7 +148,7 @@ document.addEventListener('DOMContentLoaded', () => {
     renderHistoryDropdown();
 
     fetchBtn.addEventListener('click', async () => {
-        const url = urlInput.value.trim();
+        let url = urlInput.value.trim();
         if (!url) {
             showError("URLを入力してください");
             return;
@@ -159,6 +159,15 @@ document.addEventListener('DOMContentLoaded', () => {
         fetchBtn.textContent = "取得中...";
 
         try {
+            // 「福島11R」のような場名＋レース番号の入力ならURLを解決してから取得
+            if (isVenueRacePattern(url)) {
+                fetchBtn.textContent = "レースを検索中...";
+                const resolved = await resolveRaceUrl(url);
+                url = resolved.resolved_url;
+                urlInput.value = url;
+                fetchBtn.textContent = "取得中...";
+            }
+
             const data = await fetchRaceData(url);
 
             document.getElementById('raceTitle').textContent = data.race_name || "出馬表";

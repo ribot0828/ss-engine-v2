@@ -4,7 +4,13 @@ import json
 import requests
 from bs4 import BeautifulSoup
 import re
-from datetime import datetime
+from datetime import datetime, timedelta
+
+# 場名 → netkeiba race_id内の場コード（2桁）対応表
+VENUE_CODE = {
+    "札幌": "01", "函館": "02", "福島": "03", "新潟": "04", "東京": "05",
+    "中山": "06", "中京": "07", "京都": "08", "阪神": "09", "小倉": "10",
+}
 
 # グレード抽出用の共通正規表現（title由来 / RaceData01由来の両ブロックで使用）
 # ローマ数字（Ⅰ, Ⅱ, Ⅲ）および単独のL（境界チェック付）に対応
@@ -27,11 +33,21 @@ class handler(BaseHTTPRequestHandler):
         parsed_path = urllib.parse.urlparse(self.path)
         query_components = urllib.parse.parse_qs(parsed_path.query)
         url = query_components.get('url', [None])[0]
+        resolve_query = query_components.get('resolve', [None])[0]
 
         self.send_response(200)
         self.send_header('Content-type', 'application/json')
         self.send_header('Access-Control-Allow-Origin', '*')
         self.end_headers()
+
+        # 「福島11R」のような場名＋レース番号からURLを解決するモード
+        if resolve_query and not url:
+            try:
+                data = self.resolve_race_url(resolve_query)
+            except Exception as e:
+                data = {"error": "URL解決に失敗しました: " + str(e)}
+            self.wfile.write(json.dumps(data, ensure_ascii=False).encode('utf-8'))
+            return
 
         if not url:
             self.wfile.write(json.dumps({"error": "URL is required"}).encode('utf-8'))
@@ -311,6 +327,99 @@ class handler(BaseHTTPRequestHandler):
             "payouts": {},
             "odds_unavailable": not any(h["odds"] > 0 for h in horses)
         }
+
+    def parse_venue_race(self, text):
+        """「福島11R」「福島 11」等の入力文字列から (場名, レース番号) を抽出する。
+        全角数字にも対応。場名またはレース番号が認識できない場合は None を返す。"""
+        text = (text or "").strip()
+        zen = "０１２３４５６７８９"
+        han = "0123456789"
+        text = text.translate(str.maketrans(zen, han))
+
+        venue = None
+        venue_pos = -1
+        for v in VENUE_CODE:
+            pos = text.find(v)
+            if pos != -1:
+                venue = v
+                venue_pos = pos
+                break
+        if not venue:
+            return None, None
+
+        # 場名より後ろの数字を優先的に探す（無ければ文字列全体から探す）
+        rest = text[venue_pos + len(venue):]
+        num_match = re.search(r'(\d{1,2})', rest) or re.search(r'(\d{1,2})', text)
+        if not num_match:
+            return venue, None
+
+        race_num = int(num_match.group(1))
+        if race_num < 1 or race_num > 12:
+            return venue, None
+
+        return venue, race_num
+
+    def build_candidate_dates(self):
+        """レース検索の候補日を返す。基準日〜直近の土日を優先し、
+        見つからない場合の参照用に前の週の土日も候補に含める（最大4日）。"""
+        today = datetime.now()
+        dates = []
+
+        if today.weekday() == 5:  # 土曜日
+            dates.append(today)
+            dates.append(today + timedelta(days=1))
+        elif today.weekday() == 6:  # 日曜日
+            dates.append(today - timedelta(days=1))
+            dates.append(today)
+        else:
+            days_until_sat = (5 - today.weekday()) % 7
+            sat = today + timedelta(days=days_until_sat)
+            dates.append(sat)
+            dates.append(sat + timedelta(days=1))
+
+        prev_sat = dates[0] - timedelta(days=7)
+        dates.append(prev_sat)
+        dates.append(prev_sat + timedelta(days=1))
+
+        return dates
+
+    def resolve_race_url(self, query_text):
+        """「福島11R」等の入力からnetkeibaのレースURLを解決する。"""
+        venue, race_num = self.parse_venue_race(query_text)
+        if not venue:
+            return {"error": f"競馬場名を認識できませんでした: {query_text}"}
+        if not race_num:
+            return {"error": f"レース番号を認識できませんでした: {query_text}"}
+
+        place_code = VENUE_CODE[venue]
+        headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"}
+
+        for target_date in self.build_candidate_dates():
+            date_str = target_date.strftime("%Y%m%d")
+            try:
+                res = requests.get(
+                    f"https://race.netkeiba.com/top/race_list_sub.html?kaisai_date={date_str}",
+                    headers=headers, timeout=10
+                )
+            except requests.RequestException:
+                continue
+            if res.status_code != 200:
+                continue
+            res.encoding = res.apparent_encoding or res.encoding
+
+            race_ids = set(re.findall(r'race_id=(\d{12})', res.text))
+            for rid in race_ids:
+                if rid[4:6] == place_code and int(rid[10:12]) == race_num:
+                    resolved_url = f"https://race.netkeiba.com/race/shutuba.html?race_id={rid}"
+                    return {
+                        "resolved_url": resolved_url,
+                        "race_id": rid,
+                        "kaisai_date": date_str,
+                        "venue": venue,
+                        "race_num": race_num,
+                    }
+
+        return {"error": f"{venue}{race_num}Rの開催が見つかりませんでした。近日の開催日程をご確認ください。"}
 
     def normalize_url(self, url):
         """スマホ版URLをPC版に強制変換し、(正規化後URL, is_result)を返す"""
