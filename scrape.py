@@ -384,13 +384,83 @@ class handler(BaseHTTPRequestHandler):
         return dates
 
     def resolve_race_url(self, query_text):
-        """「福島11R」等の入力からnetkeibaのレースURLを解決する。"""
+        """「福島11R」等の入力からレースURLを解決する。
+        JRA公式スマホ版（オッズ取得可）を第一候補とし、
+        見つからない場合はnetkeibaの解決にフォールバックする。"""
         venue, race_num = self.parse_venue_race(query_text)
         if not venue:
             return {"error": f"競馬場名を認識できませんでした: {query_text}"}
         if not race_num:
             return {"error": f"レース番号を認識できませんでした: {query_text}"}
 
+        # 1. JRA公式スマホ版で解決を試みる
+        try:
+            result = self.resolve_race_url_jra(venue, race_num)
+            if result:
+                return result
+        except Exception:
+            pass  # JRA側の失敗はnetkeibaフォールバックで吸収
+
+        # 2. netkeibaにフォールバック（過去レース参照などJRA側で消えたページ対策）
+        return self.resolve_race_url_netkeiba(venue, race_num)
+
+    def resolve_race_url_jra(self, venue, race_num):
+        """JRA公式スマホ版のページ遷移からレースURLを解決する。
+        出馬表トップ（開催選択）→ 会場のレース選択 → 該当レースの順にCNAMEリンクを辿り、
+        既存のscrape_jraが解析できる簡易テーブル形式（sw01ddd系）のURLを返す。
+        見つからなければ None を返す。"""
+        place_code = VENUE_CODE[venue]
+        headers = {"User-Agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1"}
+        base = "https://sp.jra.jp/JRADB/accessD.html"
+
+        def fetch(cname):
+            # 一覧系ページはGETだとエラーページへ飛ばされることがあるためPOSTで取得する
+            res = requests.post(base, data={"cname": cname}, headers=headers, timeout=10)
+            return res.content.decode('cp932', errors='replace')
+
+        # 1. 出馬表トップ（開催選択）: 会場リンクは
+        #    sw01drl00 + 場コード2桁 + 年4桁 + 回2桁 + 日目2桁 + 開催日8桁 + /チェックサム
+        top_html = fetch("sw01dli00/80")
+        candidates = []
+        for m in re.finditer(r"(sw01drl00(\d{2})\d{8}(\d{8})/[0-9A-F]{2})", top_html):
+            if m.group(2) == place_code:
+                candidates.append((m.group(3), m.group(1)))  # (開催日, cname)
+        if not candidates:
+            return None
+
+        # 今日以降で最も近い開催日を優先。無ければ直近の過去開催日
+        today_str = datetime.now().strftime("%Y%m%d")
+        upcoming = sorted(c for c in candidates if c[0] >= today_str)
+        chosen_date, venue_cname = upcoming[0] if upcoming else max(candidates)
+
+        # 2. レース選択ページ: 各レースの出馬表リンクは
+        #    sw01dde + 01 + 場コード2桁 + 年4桁 + 回2桁 + 日目2桁 + レース番号2桁 + 開催日8桁
+        list_html = fetch(venue_cname)
+        race_cname = None
+        for m in re.finditer(r"(sw01dde\d{12}(\d{2})\d{8}/[0-9A-F]{2})", list_html):
+            if m.group(1)[9:11] == place_code and int(m.group(2)) == race_num:
+                race_cname = m.group(1)
+                break
+        if not race_cname:
+            return None
+
+        # 3. 出馬表ページ内から簡易テーブル形式（sw01ddd系）のCNAMEを取得
+        #    （scrape_jraが解析するs_tableレイアウトはddd系ページにのみ存在する）
+        race_html = fetch(race_cname)
+        ddd_match = re.search(r"(sw01ddd\d{22}/[0-9A-F]{2})", race_html)
+        final_cname = ddd_match.group(1) if ddd_match else race_cname
+
+        return {
+            "resolved_url": f"{base}?CNAME={final_cname}",
+            "race_id": final_cname,
+            "kaisai_date": chosen_date,
+            "venue": venue,
+            "race_num": race_num,
+            "source": "jra",
+        }
+
+    def resolve_race_url_netkeiba(self, venue, race_num):
+        """netkeibaの開催日別レース一覧からレースURLを解決する（JRA失敗時のフォールバック）。"""
         place_code = VENUE_CODE[venue]
         headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"}
 
@@ -417,6 +487,7 @@ class handler(BaseHTTPRequestHandler):
                         "kaisai_date": date_str,
                         "venue": venue,
                         "race_num": race_num,
+                        "source": "netkeiba",
                     }
 
         return {"error": f"{venue}{race_num}Rの開催が見つかりませんでした。近日の開催日程をご確認ください。"}
