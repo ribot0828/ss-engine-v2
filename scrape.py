@@ -4,7 +4,14 @@ import json
 import requests
 from bs4 import BeautifulSoup
 import re
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
+
+# 日本時間（Vercelのサーバー時刻はUTCのため、日付判定は必ずJSTで行う）
+JST = timezone(timedelta(hours=9))
+
+
+def now_jst():
+    return datetime.now(JST)
 
 # 場名 → netkeiba race_id内の場コード（2桁）対応表
 VENUE_CODE = {
@@ -93,7 +100,7 @@ class handler(BaseHTTPRequestHandler):
                 break
 
         if not date_info:
-            date_info = datetime.now().strftime("%Y-%m-%d")
+            date_info = now_jst().strftime("%Y-%m-%d")
 
         # 3. コース情報 (div.cell.course = "コース：1,800 メートル （芝・右）")
         course_info = ""
@@ -362,7 +369,7 @@ class handler(BaseHTTPRequestHandler):
     def build_candidate_dates(self):
         """レース検索の候補日を返す。基準日〜直近の土日を優先し、
         見つからない場合の参照用に前の週の土日も候補に含める（最大4日）。"""
-        today = datetime.now()
+        today = now_jst()
         dates = []
 
         if today.weekday() == 5:  # 土曜日
@@ -429,7 +436,7 @@ class handler(BaseHTTPRequestHandler):
             return None
 
         # 今日以降で最も近い開催日を優先。無ければ直近の過去開催日
-        today_str = datetime.now().strftime("%Y%m%d")
+        today_str = now_jst().strftime("%Y%m%d")
         upcoming = sorted(c for c in candidates if c[0] >= today_str)
         chosen_date, venue_cname = upcoming[0] if upcoming else max(candidates)
 
@@ -518,7 +525,7 @@ class handler(BaseHTTPRequestHandler):
                 date_info = f"{date_match.group(1)}-{date_match.group(2).zfill(2)}-{date_match.group(3).zfill(2)}"
 
         if not date_info:
-            date_info = datetime.now().strftime("%Y-%m-%d")
+            date_info = now_jst().strftime("%Y-%m-%d")
         # ------------------------
 
         course_elem = soup.select_one(".RaceData01") or soup.select_one(".Race_Name_Box")
