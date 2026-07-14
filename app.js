@@ -1,9 +1,9 @@
 // SS-Engine アプリケーション オーケストレーション（DOM配線・描画）
-import { analyzeRace } from './logic.js?v=5.40.0';
-import { fetchRaceData, isVenueRacePattern, resolveRaceUrl } from './api.js?v=5.40.0';
-import { loadHistory, getHistory, saveHistory, deleteHistory, markExported } from './history.js?v=5.40.0';
-import { buildXPostText } from './xpost.js?v=5.40.0';
-import { exportCsv } from './csv.js?v=5.40.0';
+import { analyzeRace } from './logic.js?v=5.41.0';
+import { fetchRaceData, isVenueRacePattern, resolveRaceUrl } from './api.js?v=5.41.0';
+import { loadHistory, getHistory, saveHistory, deleteHistory, markExported } from './history.js?v=5.41.0';
+import { buildXPostText } from './xpost.js?v=5.41.0';
+import { exportCsv } from './csv.js?v=5.41.0';
 
 document.addEventListener('DOMContentLoaded', () => {
     const fetchBtn = document.getElementById('fetchBtn');
@@ -96,7 +96,12 @@ document.addEventListener('DOMContentLoaded', () => {
             dateInfo: savedDateInfo,
             horses: JSON.parse(JSON.stringify(currentHorses)),
             timestamp: new Date().getTime(),
-            isGradeRace: isGradeRace
+            isGradeRace: isGradeRace,
+            raceStartTime: raceStartTime || "",
+            // 購入時オッズの最終更新時刻。Dateはそのまま JSON化できないため epoch(ms) で保存
+            oddsUpdatedAt: (oddsUpdatedAt instanceof Date && !isNaN(oddsUpdatedAt.getTime())) ? oddsUpdatedAt.getTime() : null,
+            raceWeather: raceWeather || "",
+            raceBaba: raceBaba || "",
         };
         saveHistory(historyItem);
         renderHistoryDropdown(lastFetchedUrl);
@@ -129,6 +134,12 @@ document.addEventListener('DOMContentLoaded', () => {
 
             currentVenue = item.venue || "";
             currentRaceNum = item.raceNum || "";
+
+            // 2026-07-14: 発走時刻・オッズ更新時刻・天候・馬場も履歴から復元（CSV出力時の欠落防止）
+            raceStartTime = item.raceStartTime || "";
+            oddsUpdatedAt = item.oddsUpdatedAt ? new Date(item.oddsUpdatedAt) : null;
+            raceWeather = item.raceWeather || "";
+            raceBaba = item.raceBaba || "";
 
             renderTable();
             resultsPanel.style.display = 'none';
@@ -193,7 +204,8 @@ document.addEventListener('DOMContentLoaded', () => {
                 if (!h.rank) h.rank = 'B';
             });
 
-            isGradeRace = data.race_name ? data.race_name.includes('G1') || data.race_name.includes('G2') || data.race_name.includes('G3') : false;
+            // 2026-07-14 [h6] 重賞判定に grade_info も追加（レース名にG表記が無いケース対応。analyzer.js isGraded 整合）
+            isGradeRace = /G[123]/.test(`${data.race_name || ''} ${data.grade_info || ''}`);
 
             // ▼ 刷新: タイトル等から精査された正確なグレードと頭数を結合してUIへ同期
             const gradePref = data.grade_info ? data.grade_info.trim() + " " : "";
@@ -318,7 +330,7 @@ document.addEventListener('DOMContentLoaded', () => {
         if (currentHorses.length === 0) return;
 
         saveToHistory();
-        const result = analyzeRace(currentHorses, isGradeRace);
+        const result = analyzeRace(currentHorses, isGradeRace, document.getElementById('raceCourse').textContent);
         renderResults(result);
     });
 
@@ -521,7 +533,7 @@ document.addEventListener('DOMContentLoaded', () => {
                      h.odds = parseFloat(h.finalOdds) || 0;
                  }
             });
-            const tempRes = analyzeRace(tempHorses, isGradeRace);
+            const tempRes = analyzeRace(tempHorses, isGradeRace, document.getElementById('raceCourse').textContent);
 
             currentHorses.forEach(h => {
                  const fh = tempRes.horses.find(x => x.umaban === h.umaban);
@@ -601,6 +613,7 @@ document.addEventListener('DOMContentLoaded', () => {
         });
 
         if (count > 0) {
+            oddsUpdatedAt = new Date();
             renderTable(); // 画面を更新し、手動入力のinput欄にも数値を反映させる
             alert(`${count}頭のオッズを反映しました。スマホ版でも動作を確認してください。`);
         } else {

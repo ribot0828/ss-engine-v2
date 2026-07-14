@@ -1,13 +1,13 @@
 // SS-Engine Ver.5.22 Core Logic
 
-export const LOGIC_VERSION = "v5.32";
+export const LOGIC_VERSION = "v5.33";
 
 const SCORE_MAP = {
     'S': 100, 'A': 65, 'B': 40, 'C': 20, 'D': 10, 'E': 3, 'F': 0.5
 };
 
 // 攻撃系優先度（単勝 WIN_PRIORITY と三連複 TRIO_ATTACK_PRIORITY は同一のため統合）[10] Kelly比 D1>B1
-const ATTACK_PRIORITY = ['A3', 'B2', 'A2', 'D1', 'B1', 'B3', 'X'];
+const ATTACK_PRIORITY = ['A3', 'B2', 'A2', 'D1', 'B1', 'B3'];
 // 防御系優先度（axisPrio / defPrio / defenseClasses は同一の並びのため統合）
 const DEFENSE_PRIORITY = ['S0', 'S1', 'S2', 'A0', 'B0+', 'A1', 'B0'];
 const DEFENSE_SET = new Set(DEFENSE_PRIORITY);
@@ -20,7 +20,6 @@ const UNIT_TABLE = {
     'B1': { SSS: 1, SS: 1, S: 1, Low: 0 }, // [8] B1は全推奨度1U固定
     'D1': { SSS: 1, SS: 1, S: 1, Low: 0 }, // 1U固定（Kellyのfloor）
     'B3': { SSS: 1, SS: 1, S: 1, Low: 0 },
-    'X':  { SSS: 1, SS: 1, S: 1, Low: 0 },
 };
 
 // 小数点第3位以下切り捨て (厳密な生データ比較を維持)
@@ -28,7 +27,25 @@ function truncateTo3(val) {
     return Math.floor(val * 1000 + 1e-9) / 1000;
 }
 
-export function analyzeRace(horses, isGradeRace = false) {
+// コース詳細文字列から芝/ダを判定（先に出現した方。analyzer.js surfaceOfRow 移植）
+function surfaceOfCourse(courseInfo) {
+    const s = courseInfo || "";
+    const iT = s.indexOf('芝');
+    const iD = s.indexOf('ダ');
+    if (iT >= 0 && (iD < 0 || iT < iD)) return '芝';
+    if (iD >= 0) return 'ダ';
+    return '-';
+}
+// コース詳細文字列から距離mを抽出（analyzer.js distanceOfRow 移植）
+function distanceOfCourse(courseInfo) {
+    const s = courseInfo || "";
+    let m = s.match(/(\d{3,4})\s*m/);
+    if (m) return parseInt(m[1], 10);
+    m = s.match(/(\d{4})/);
+    return m ? parseInt(m[1], 10) : 0;
+}
+
+export function analyzeRace(horses, isGradeRace = false, courseInfo = "") {
     if (!horses || horses.length === 0) return null;
 
     // フェールセーフ: odds / rank の欠損・型異常を補正
@@ -66,7 +83,7 @@ export function analyzeRace(horses, isGradeRace = false) {
         else if (rank === 'A' && ev >= 0.600 && ev <= 0.899) h.cls = 'A1'; // < 0.900 is <=0.899 if trunc 3
         
         // Win-Core
-        else if (rank === 'D' && ev >= 3.000 && ev <= 3.999) h.cls = 'X';
+        // 2026-07-14 [h2] X購入停止: D評価EV3.000-3.999のX分類を廃止しN扱い（analyzer.js 382ec0e 整合）
         else if (rank === 'B' && ev >= 1.500 && ev <= 1.699) h.cls = 'B2';
         else if (rank === 'B' && ev >= 1.100 && ev <= 1.350) h.cls = 'B1';
         else if (rank === 'B' && ev >= 2.000 && ev <= 4.500) h.cls = 'B3';
@@ -103,10 +120,13 @@ export function analyzeRace(horses, isGradeRace = false) {
     const isLow = recommendation.includes('Low');
     // S推奨度は三連複スキップ（単勝のみ執行）
     const isSRec = recommendation.includes('(S)') && !recommendation.includes('SS');
+    // 2026-07-14 [h3] SSS推奨度は三連複スキップ（実運用SSS三連複=0%/25R。単勝のみ執行）
+    const isSSSRec = recommendation.includes('SSS');
 
     let skipReason = null;
     const requiredDensity = isGradeRace ? 0.100 : 0.150;
     if (!hasAxis) skipReason = '軸不在（単勝のみ執行可）';
+    else if (isSSSRec) skipReason = 'SSS推奨度（三連複スキップ・単勝のみ執行）';
     else if (isSRec) skipReason = 'S推奨度（単勝のみ執行）';
     else if (ssDensity < requiredDensity) skipReason = `低密度 (SS密度 ${ssDensity} < ${requiredDensity})`;
 
@@ -144,20 +164,18 @@ export function analyzeRace(horses, isGradeRace = false) {
     // 4. MAO計算
     const defenseClasses = DEFENSE_SET;
     const attackClasses1 = new Set(['A3', 'B1', 'B2', 'B3', 'A2']); // Buffer 1.2
-    const attackClassesX = new Set(['X']); // 3.0, Buffer 1.0
     const attackClassesD1 = new Set(['D1']); // 1.0, Buffer 1.0
 
     horses.forEach(h => {
         if (defenseClasses.has(h.cls)) h.maoRaw = 0.60 / h.winRate; // Ver.5.3: 防御系係数 0.50→0.60（三連複軸の観測精度向上。単勝P&L影響ゼロ）
         else if (attackClasses1.has(h.cls)) h.maoRaw = 0.90 / h.winRate;
-        else if (attackClassesX.has(h.cls)) h.maoRaw = 3.00 / h.winRate;
         else if (attackClassesD1.has(h.cls)) h.maoRaw = 1.50 / h.winRate; // 2026-07-05: D1係数 1.00→1.50（rankCalibration D比0.666による較正。実質約50倍下限）
         else h.maoRaw = 999;
-        
+
         h.mao = truncateTo3(h.maoRaw);
 
         // Amber Audit
-        if (attackClassesX.has(h.cls) || attackClassesD1.has(h.cls)) {
+        if (attackClassesD1.has(h.cls)) {
             h.amberPassed = h.odds >= h.mao;
         } else if (defenseClasses.has(h.cls) || attackClasses1.has(h.cls)) {
             h.amberPassed = h.odds >= (h.mao * 1.2);
@@ -172,8 +190,8 @@ export function analyzeRace(horses, isGradeRace = false) {
         if (h.umaban >= 13 && (h.cls === 'A1' || h.cls === 'S2' || h.cls === 'A0')) return false;
 
         // フェーズ4.5: 近走監査 (Striker Validation)
-        // X, D1 は手動チェックがONの場合のみ単勝対象とする
-        if (h.cls === 'X' || h.cls === 'D1') {
+        // D1 は手動チェックがONの場合のみ単勝対象とする
+        if (h.cls === 'D1') {
             if (!h.passedStrikerValidation) return false;
         }
 
@@ -192,9 +210,13 @@ export function analyzeRace(horses, isGradeRace = false) {
     else if (recommendation.includes('SS')) recLevel = 'SS';
     else if (recommendation.includes('(S)')) recLevel = 'S';
 
+    // 2026-07-14 [h5/h6] ダ1401m+・重賞はユニット半減（最低1U維持。analyzer.js getUnits 整合）
+    const isDirtLong = surfaceOfCourse(courseInfo) === 'ダ' && distanceOfCourse(courseInfo) >= 1401;
     winTargets.forEach(h => {
         const row = UNIT_TABLE[h.cls];
-        h.unit = row ? row[recLevel] : 0;
+        let u = row ? row[recLevel] : 0;
+        if (u > 0 && (isGradeRace || isDirtLong)) u = Math.max(1, Math.floor(u / 2));
+        h.unit = u;
     });
 
     // ② ワイド (Insurance) 
