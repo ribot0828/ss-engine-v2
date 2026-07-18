@@ -94,7 +94,7 @@ class handler(BaseHTTPRequestHandler):
             dm = re.search(r'(\d{4})年(\d{1,2})月(\d{1,2})日', t)
             if dm:
                 date_info = f"{dm.group(1)}-{dm.group(2).zfill(2)}-{dm.group(3).zfill(2)}"
-                vm = re.search(r'\d+回(\S+)\d+日', t)
+                vm = re.search(r'\d+回(\S+?)\d+日', t)
                 if vm:
                     venue = vm.group(1)
                 break
