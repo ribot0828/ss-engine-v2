@@ -1,5 +1,5 @@
 // CSVエクスポート（Excel用・BOM付きCRLF）
-import { LOGIC_VERSION } from './logic.js?v=5.42.0';
+import { LOGIC_VERSION } from './logic.js?v=5.43.0';
 
 export function exportCsv({ raceName, venueStr, courseInfo, gradeStr, dateStr, horses, lastResultData, raceStartTime, oddsUpdatedAt, raceWeather, raceBaba }) {
     const getPay = (key) => {
