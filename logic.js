@@ -1,6 +1,6 @@
 // SS-Engine Ver.5.22 Core Logic
 
-export const LOGIC_VERSION = "v5.33";
+export const LOGIC_VERSION = "v5.34";
 
 const SCORE_MAP = {
     'S': 100, 'A': 65, 'B': 40, 'C': 20, 'D': 10, 'E': 3, 'F': 0.5
@@ -13,9 +13,10 @@ const DEFENSE_PRIORITY = ['S0', 'S1', 'S2', 'A0', 'B0+', 'A1', 'B0'];
 const DEFENSE_SET = new Set(DEFENSE_PRIORITY);
 
 // 単勝ユニット配分表（推奨度レベル × クラス別）[8][9] Low推奨度は全スキップ(0U)
+// 2026-07-19: SSS列をSS水準へ縮小（live SSS回収64.8%/n=29。h11復帰条件あり）
 const UNIT_TABLE = {
-    'A3': { SSS: 6, SS: 5, S: 5, Low: 0 },
-    'B2': { SSS: 3, SS: 2, S: 2, Low: 0 }, // [9] B2適正化
+    'A3': { SSS: 5, SS: 5, S: 5, Low: 0 },
+    'B2': { SSS: 2, SS: 2, S: 2, Low: 0 }, // [9] B2適正化
     'A2': { SSS: 2, SS: 2, S: 2, Low: 0 }, // SSS/SS/S共通
     'B1': { SSS: 1, SS: 1, S: 1, Low: 0 }, // [8] B1は全推奨度1U固定
     'D1': { SSS: 1, SS: 1, S: 1, Low: 0 }, // 1U固定（Kellyのfloor）
@@ -169,7 +170,7 @@ export function analyzeRace(horses, isGradeRace = false, courseInfo = "") {
     horses.forEach(h => {
         if (defenseClasses.has(h.cls)) h.maoRaw = 0.60 / h.winRate; // Ver.5.3: 防御系係数 0.50→0.60（三連複軸の観測精度向上。単勝P&L影響ゼロ）
         else if (attackClasses1.has(h.cls)) h.maoRaw = 0.90 / h.winRate;
-        else if (attackClassesD1.has(h.cls)) h.maoRaw = 1.50 / h.winRate; // 2026-07-05: D1係数 1.00→1.50（rankCalibration D比0.666による較正。実質約50倍下限）
+        else if (attackClassesD1.has(h.cls)) h.maoRaw = 1.70 / h.winRate; // 2026-07-19: D1係数 1.50→1.70（live回収76.2%による引き締め。※2.00はD1のEV上限1.799を超え全滅となるため1.70。実質約57倍下限）
         else h.maoRaw = 999;
 
         h.mao = truncateTo3(h.maoRaw);

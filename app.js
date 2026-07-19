@@ -1,9 +1,9 @@
 // SS-Engine アプリケーション オーケストレーション（DOM配線・描画）
-import { analyzeRace } from './logic.js?v=5.41.0';
-import { fetchRaceData, isVenueRacePattern, resolveRaceUrl } from './api.js?v=5.41.0';
-import { loadHistory, getHistory, saveHistory, deleteHistory, markExported } from './history.js?v=5.41.0';
-import { buildXPostText } from './xpost.js?v=5.41.0';
-import { exportCsv } from './csv.js?v=5.41.0';
+import { analyzeRace } from './logic.js?v=5.42.0';
+import { fetchRaceData, isVenueRacePattern, resolveRaceUrl } from './api.js?v=5.42.0';
+import { loadHistory, getHistory, saveHistory, deleteHistory, markExported } from './history.js?v=5.42.0';
+import { buildXPostText } from './xpost.js?v=5.42.0';
+import { exportCsv } from './csv.js?v=5.42.0';
 
 document.addEventListener('DOMContentLoaded', () => {
     const fetchBtn = document.getElementById('fetchBtn');
