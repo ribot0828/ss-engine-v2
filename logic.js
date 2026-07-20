@@ -1,4 +1,4 @@
-// SS-Engine Ver.5.22 Core Logic
+// SS-Engine Core Logic（バージョンは下の LOGIC_VERSION が正）
 
 export const LOGIC_VERSION = "v5.34";
 

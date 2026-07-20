@@ -11,3 +11,7 @@ Thumbs.db
 
 # Vercel
 .vercel/
+
+# Claude local / archived data
+.claude/
+_archive/
