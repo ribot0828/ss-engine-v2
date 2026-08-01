@@ -35,6 +35,37 @@ def extract_grade(text):
     return grade_info
 
 
+# JRA公式はグレードをテキストで持たず、レース名横のアイコン画像でのみ示す
+# （例: icon_grade_g3.png / icon_grade_listed.png）。
+# 画像を見ないと条件クラス欄の「オープン」を拾ってしまい、GⅢ/Lが一律OPになる。
+JRA_GRADE_ICON_MAP = {
+    'g1': 'G1', 'g2': 'G2', 'g3': 'G3',
+    'jpn1': 'Jpn1', 'jpn2': 'Jpn2', 'jpn3': 'Jpn3',
+    'listed': 'L',
+    'jg1': 'J.G1', 'jg2': 'J.G2', 'jg3': 'J.G3',
+}
+
+
+def grade_from_jra_icon(scope):
+    """JRA出馬表のグレードアイコン画像からグレード表記を取得する。見つからなければ空文字。
+    ページ下部の注目レース等にも同種アイコン（icon_grade_s_g2.png）があるため、
+    呼び出し側で必ずレース名ブロックにスコープを限定すること。"""
+    if scope is None:
+        return ""
+    for img in scope.find_all('img'):
+        src = (img.get('src') or '').lower()
+        m = re.search(r'icon_grade_(?:s_)?([a-z0-9]+)\.', src)
+        if m and m.group(1) in JRA_GRADE_ICON_MAP:
+            return JRA_GRADE_ICON_MAP[m.group(1)]
+        # 未知のファイル名はalt（「GⅢ」「リステッド」等）から拾う
+        alt = (img.get('alt') or '').strip()
+        if alt:
+            grade = extract_grade(alt.replace('リステッド', 'L'))
+            if grade:
+                return grade
+    return ""
+
+
 class handler(BaseHTTPRequestHandler):
     def do_GET(self):
         parsed_path = urllib.parse.urlparse(self.path)
@@ -132,22 +163,34 @@ class handler(BaseHTTPRequestHandler):
                 race_num = nm.group(1) + "R"
 
         # 5. グレード (レース条件ブロックのみ探索。ナビメニューの「GⅠ」を拾わないようにする)
-        grade_info = ""
-        grade_pattern = r'(GⅠ|GⅡ|GⅢ|G[1-3]|Jpn[1-3]|Jpn[ⅠⅡⅢ]|(?<![a-zA-Z])L(?![a-zA-Z])|OP|オープン|[1-3]勝クラス|[1-3]勝ク(?!ラス)|未勝利|新馬)'
-        # 探索対象: レース名 → h2 → div.type(条件ブロック) → div.cell(class属性)
+        grade_pattern =r'(GⅠ|GⅡ|GⅢ|G[1-3]|Jpn[1-3]|Jpn[ⅠⅡⅢ]|(?<![a-zA-Z])L(?![a-zA-Z])|OP|オープン|[1-3]勝クラス|[1-3]勝ク(?!ラス)|未勝利|新馬)'
         type_div = soup.find('div', class_='type')
-        class_cell = soup.find('div', class_='cell')
-        search_sources = [
+
+        # 5-1. 条件クラス（オープン/3勝クラス/未勝利…）は div.type > div.cell.class にある
+        race_class = ""
+        if type_div:
+            class_div = type_div.find('div', class_='class')
+            if class_div:
+                race_class = class_div.get_text().strip().replace('オープン', 'OP')
+
+        # 5-2. グレードはレース名横のアイコン画像が唯一の手がかり（テキストには出ない）
+        grade_scope = race_name_el or soup.find('h2')
+        grade_info = grade_from_jra_icon(grade_scope)
+
+        # 5-3. アイコンが無い場合のみテキスト探索
+        # 探索対象: レース名 → h2 → div.type(条件ブロック) → div.cell(class属性)
+        search_sources = [] if grade_info else [
             race_name,
             soup.find('h2').get_text() if soup.find('h2') else "",
             type_div.get_text() if type_div else "",
         ]
         # div.cell の中に「勝クラス」等を含むものを探す
-        for div in soup.find_all('div', class_='cell'):
-            ct = div.get_text().strip()
-            if re.search(r'(勝クラス|勝ク|OP|オープン|新馬|未勝利)', ct):
-                search_sources.append(ct)
-                break
+        if search_sources:
+            for div in soup.find_all('div', class_='cell'):
+                ct = div.get_text().strip()
+                if re.search(r'(勝クラス|勝ク|OP|オープン|新馬|未勝利)', ct):
+                    search_sources.append(ct)
+                    break
         for search_text in search_sources:
             grade_match = re.search(grade_pattern, search_text, re.IGNORECASE)
             if grade_match:
@@ -159,7 +202,7 @@ class handler(BaseHTTPRequestHandler):
                     grade_info = grade_info.upper()
                 break
         if not grade_info:
-            grade_info = "一般"
+            grade_info = race_class or "一般"
 
         # 6. 馬リスト (Table: class=s_table, narrow-xyなし = モバイル用簡易テーブル)
         #    Col0: div.num=馬番, div.horse=馬名
@@ -266,7 +309,10 @@ class handler(BaseHTTPRequestHandler):
             c = re.sub(r'勝クラス|勝ク', '勝', c)
             return c
 
-        current_cls_norm = normalize_class(grade_info) if grade_info else ""
+        # 近走監査の突合は「条件クラス」で行う（重賞・Lも過去走側の表記はOPのため、
+        # grade_infoがG3/Lになっても比較軸はオープンクラスのまま維持する）
+        current_cls = race_class or grade_info
+        current_cls_norm = normalize_class(current_cls) if current_cls and current_cls != "一般" else ""
         detail_tbl = None
         for t in soup.find_all('table', class_='s_table'):
             if 'narrow-xy' in (t.get('class') or []):
