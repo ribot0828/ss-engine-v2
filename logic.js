@@ -1,6 +1,6 @@
 // SS-Engine Core Logic（バージョンは下の LOGIC_VERSION が正）
 
-export const LOGIC_VERSION = "v5.34";
+export const LOGIC_VERSION = "v5.35";
 
 const SCORE_MAP = {
     'S': 100, 'A': 65, 'B': 40, 'C': 20, 'D': 10, 'E': 3, 'F': 0.5
@@ -11,6 +11,8 @@ const ATTACK_PRIORITY = ['A3', 'B2', 'A2', 'D1', 'B1', 'B3'];
 // 防御系優先度（axisPrio / defPrio / defenseClasses は同一の並びのため統合）
 const DEFENSE_PRIORITY = ['S0', 'S1', 'S2', 'A0', 'B0+', 'A1', 'B0'];
 const DEFENSE_SET = new Set(DEFENSE_PRIORITY);
+// 三連複を執行しない軸クラス（2026-10-10 h22決着。撤退条件はanalyzer側h25）
+const TRIO_SKIP_AXIS_CLASSES = new Set(['B0+']);
 
 // 単勝ユニット配分表（推奨度レベル × クラス別）[8][9] Low推奨度は全スキップ(0U)
 // 2026-07-19: SSS列をSS水準へ縮小（live SSS回収64.8%/n=29。h11復帰条件あり）
@@ -124,12 +126,18 @@ export function analyzeRace(horses, isGradeRace = false, courseInfo = "") {
     // 2026-07-14 [h3] SSS推奨度は三連複スキップ（実運用SSS三連複=0%/25R。単勝のみ執行）
     const isSSSRec = recommendation.includes('SSS');
 
+    // 三連複の軸クラス（DEFENSE_PRIORITY で最初に存在するクラス。下の軸選定と同じ規則）
+    const axisCls = DEFENSE_PRIORITY.find(c => horses.some(h => h.cls === c)) || null;
+
     let skipReason = null;
     const requiredDensity = isGradeRace ? 0.100 : 0.150;
     if (!hasAxis) skipReason = '軸不在（単勝のみ執行可）';
     else if (isSSSRec) skipReason = 'SSS推奨度（三連複スキップ・単勝のみ執行）';
     else if (isSRec) skipReason = 'S推奨度（単勝のみ執行）';
     else if (ssDensity < requiredDensity) skipReason = `低密度 (SS密度 ${ssDensity} < ${requiredDensity})`;
+    // 2026-10-10 [h22→h25] 軸B0+は三連複スキップ（live 133R/回収67.3%で2サイクル連続<80%）。
+    // 軸の繰り上げはしない。B0+はPlace-Coreに残るため推奨度・単勝は不変（analyzer.js TRIO_SKIP_AXIS_CLASSES 整合）
+    else if (TRIO_SKIP_AXIS_CLASSES.has(axisCls)) skipReason = `軸${axisCls}（三連複スキップ・単勝のみ執行）`;
 
     // タイブレークソート関数群
     const sortAttack = (a, b) => {
