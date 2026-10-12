@@ -39,6 +39,23 @@
                     <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg> 削除
                 </button>
             </div>
+            <!-- 結果の一括処理（2026-10-12） -->
+            <div class="mb-5 bg-slate-800/80 p-3 rounded-lg border border-emerald-700/60">
+                <div class="flex flex-col md:flex-row gap-2 md:items-center">
+                    <span class="text-slate-300 text-sm font-semibold shrink-0">結果の一括処理:</span>
+                    <span id="historySummary" class="flex-1 text-xs text-slate-400"></span>
+                    <label class="flex items-center gap-1 text-xs text-slate-300 shrink-0 cursor-pointer">
+                        <input type="checkbox" id="autoResultCheck" class="w-4 h-4"> 10分ごとに自動取得
+                    </label>
+                    <button id="batchFetchResultsBtn" class="shrink-0 bg-green-600 hover:bg-green-500 text-white text-sm font-semibold py-2 px-4 rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
+                        結果を一括取得
+                    </button>
+                    <button id="batchExportCsvBtn" disabled class="shrink-0 bg-blue-600 hover:bg-blue-500 text-white text-sm font-semibold py-2 px-4 rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
+                        未出力をまとめてCSV
+                    </button>
+                </div>
+                <div id="batchStatusText" class="text-xs text-emerald-300 mt-2 min-h-4"></div>
+            </div>
             <div class="flex flex-col md:flex-row gap-4 mb-4">
                 <input type="text" id="urlInput" placeholder="netkeibaの出馬表URLを入力（例: 福島11R でも入力可）" class="flex-1 bg-slate-800 border border-slate-600 rounded-lg px-4 py-2 text-white focus:outline-none focus:border-purple-500 transition-colors">
                 <button id="fetchBtn" class="btn-primary text-white font-semibold py-2 px-6 rounded-lg">
@@ -190,7 +207,7 @@
                 </h3>
                 <p class="text-sm text-slate-400 mb-4">結果ページのURLから着順を自動取得して合体させ、Excel用CSVファイルとして出力します。</p>
                 <div class="flex flex-col md:flex-row gap-4 mb-2">
-                    <input type="text" id="resultUrlInput" placeholder="結果ページのURLを入力 (例: netkeibaのresult.html...)" class="flex-1 bg-slate-800 border border-slate-600 rounded-lg px-4 py-2 text-white focus:outline-none focus:border-green-500 transition-colors">
+                    <input type="text" id="resultUrlInput" placeholder="空欄のまま押すと結果ページを自動で特定します（URLを貼っても可）" class="flex-1 bg-slate-800 border border-slate-600 rounded-lg px-4 py-2 text-white focus:outline-none focus:border-green-500 transition-colors">
                     <button id="mergeResultBtn" class="bg-green-600 hover:bg-green-500 text-white font-semibold py-2 px-6 rounded-lg transition-colors whitespace-nowrap">
                         着順を合体する
                     </button>
@@ -207,6 +224,6 @@
         </footer>
     </div>
     
-    <script type="module" src="app.js?v=2026-10-10a"></script>
+    <script type="module" src="app.js?v=2026-10-12a"></script>
 </body>
 </html>

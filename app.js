@@ -1,9 +1,10 @@
 // SS-Engine アプリケーション オーケストレーション（DOM配線・描画）
-import { analyzeRace } from './logic.js?v=5.44.0';
-import { fetchRaceData, isVenueRacePattern, resolveRaceUrl } from './api.js?v=5.44.0';
-import { loadHistory, getHistory, saveHistory, deleteHistory, markExported } from './history.js?v=5.44.0';
-import { buildXPostText } from './xpost.js?v=5.44.0';
-import { exportCsv } from './csv.js?v=5.44.0';
+import { analyzeRace } from './logic.js?v=5.45.0';
+import { fetchRaceData, isVenueRacePattern, resolveRaceUrl, resolveRaceIdByDate } from './api.js?v=5.45.0';
+import { loadHistory, getHistory, getHistoryItem, saveHistory, updateHistoryItem, deleteHistory, markExported, markExportedMany } from './history.js?v=5.45.0';
+import { buildXPostText } from './xpost.js?v=5.45.0';
+import { exportCsv, exportCsvMulti } from './csv.js?v=5.45.0';
+import { deriveResultUrl, isResultReady, resultMatchesRace, slimResult, mergeResultIntoHorses, buildGradeValue, applyResultToItem, hasResult, raceDateOf, isResultDue } from './results.js?v=5.45.0';
 
 document.addEventListener('DOMContentLoaded', () => {
     const fetchBtn = document.getElementById('fetchBtn');
@@ -21,6 +22,11 @@ document.addEventListener('DOMContentLoaded', () => {
     const mergeResultBtn = document.getElementById('mergeResultBtn');
     const exportCsvBtn = document.getElementById('exportCsvBtn');
     const resultStatusText = document.getElementById('resultStatusText');
+    const historySummary = document.getElementById('historySummary');
+    const batchFetchResultsBtn = document.getElementById('batchFetchResultsBtn');
+    const batchExportCsvBtn = document.getElementById('batchExportCsvBtn');
+    const autoResultCheck = document.getElementById('autoResultCheck');
+    const batchStatusText = document.getElementById('batchStatusText');
 
     let currentHorses = [];
     let savedGradeInfo = "";
@@ -70,13 +76,35 @@ document.addEventListener('DOMContentLoaded', () => {
             opt.value = h.url;
 
             // ▼ 追加: 出力済みフラグの確認とマークの付与
-            const statusMark = h.isExported ? "✅ [出力済] " : "";
+            const statusMark = (h.isExported ? "✅ [出力済] " : "") + (hasResult(h) ? "🏁 " : "");
             opt.textContent = `${statusMark}${prefix}${title} (${dateStr})`;
 
             historySelect.appendChild(opt);
         });
         if (selectedUrl) historySelect.value = selectedUrl;
         deleteHistoryBtn.disabled = !historySelect.value;
+        renderHistorySummary();
+    };
+
+    // 履歴の集計（結果未取得・未出力の件数）を表示
+    function renderHistorySummary() {
+        if (!historySummary) return;
+        const all = getHistory();
+        const noResult = all.filter(h => !hasResult(h)).length;
+        const exportable = all.filter(h => hasResult(h) && !h.isExported).length;
+        historySummary.textContent = `保存 ${all.length}レース ／ 結果未取得 ${noResult} ／ 結果済み・未出力 ${exportable}（🏁=結果済み ✅=出力済）`;
+        if (batchExportCsvBtn) batchExportCsvBtn.disabled = exportable === 0;
+    }
+
+    // 保存失敗（容量不足）を握りつぶさず知らせる
+    const safeSave = (fn) => {
+        try {
+            fn();
+            return true;
+        } catch (e) {
+            alert(e.message);
+            return false;
+        }
     };
 
     const saveToHistory = () => {
@@ -102,8 +130,10 @@ document.addEventListener('DOMContentLoaded', () => {
             oddsUpdatedAt: (oddsUpdatedAt instanceof Date && !isNaN(oddsUpdatedAt.getTime())) ? oddsUpdatedAt.getTime() : null,
             raceWeather: raceWeather || "",
             raceBaba: raceBaba || "",
+            // 2026-10-12: 払戻などの結果データも保存（従来は保存されず、履歴から開き直すと払戻が「-」になっていた）
+            result: lastResultData ? (lastResultData.fetchedAt ? lastResultData : slimResult(lastResultData)) : undefined,
         };
-        saveHistory(historyItem);
+        safeSave(() => saveHistory(historyItem));
         renderHistoryDropdown(lastFetchedUrl);
     };
 
@@ -112,7 +142,11 @@ document.addEventListener('DOMContentLoaded', () => {
         deleteHistoryBtn.disabled = !url;
         if (!url) return;
         const item = getHistory().find(h => h.url === url);
-        if (item) {
+        if (item) restoreFromHistory(item);
+    });
+
+    function restoreFromHistory(item, { keepPanel = false } = {}) {
+        {
             lastFetchedUrl = item.url;
             urlInput.value = item.url;
             document.getElementById('raceTitle').textContent = item.raceName;
@@ -140,11 +174,12 @@ document.addEventListener('DOMContentLoaded', () => {
             oddsUpdatedAt = item.oddsUpdatedAt ? new Date(item.oddsUpdatedAt) : null;
             raceWeather = item.raceWeather || "";
             raceBaba = item.raceBaba || "";
+            lastResultData = item.result || null;
 
             renderTable();
-            resultsPanel.style.display = 'none';
+            if (!keepPanel) resultsPanel.style.display = 'none';
         }
-    });
+    }
 
     deleteHistoryBtn.addEventListener('click', () => {
         const url = historySelect.value;
@@ -218,6 +253,8 @@ document.addEventListener('DOMContentLoaded', () => {
             }
 
             lastFetchedUrl = url;
+            // 別レースの払戻がCSVに混ざらないよう、このレースの保存済み結果だけを引き継ぐ
+            lastResultData = (getHistoryItem(url) || {}).result || null;
             enableOddsControls();
 
             if (data.odds_unavailable) {
@@ -329,8 +366,9 @@ document.addEventListener('DOMContentLoaded', () => {
     analyzeBtn.addEventListener('click', () => {
         if (currentHorses.length === 0) return;
 
-        saveToHistory();
+        // 解析してから保存する（従来は保存→解析の順で、履歴のクラス/EVが1回前の解析結果のままだった）
         const result = analyzeRace(currentHorses, isGradeRace, document.getElementById('raceCourse').textContent);
+        saveToHistory();
         renderResults(result);
     });
 
@@ -481,15 +519,22 @@ document.addEventListener('DOMContentLoaded', () => {
     };
     // Merge Result Data
     mergeResultBtn.addEventListener('click', async () => {
-        const resUrl = resultUrlInput.value.trim();
-        if (!resUrl) return;
+        if (!lastFetchedUrl || currentHorses.length === 0) return;
 
         mergeResultBtn.disabled = true;
         mergeResultBtn.textContent = "取得中...";
         resultStatusText.textContent = "";
 
         try {
+            // URL欄が空なら、表示中レースの出馬表URLから結果ページを自動で特定する
+            const resUrl = resultUrlInput.value.trim() || await findResultUrl({
+                url: lastFetchedUrl, venue: currentVenue, raceNum: currentRaceNum, dateInfo: savedDateInfo
+            });
+            if (!resUrl) throw new Error("結果ページを特定できませんでした。結果URLを貼り付けてください。");
             const data = await fetchRaceData(resUrl, { errorMsg: "結果の取得に失敗" });
+            if (!resultUrlInput.value.trim() && !isResultReady(data)) {
+                throw new Error("まだ結果が確定していません。確定後にもう一度押してください。");
+            }
 
             if (data.course_info) {
                 const courseLabel = document.getElementById('raceCourse');
@@ -504,56 +549,19 @@ document.addEventListener('DOMContentLoaded', () => {
             if (data.weather) raceWeather = data.weather;
             if (data.baba) raceBaba = data.baba;
 
-            // ▼ 修正: グレードと頭数をUIに強制セット（同期）
-            let finalGrade = "";
-            if (data.grade_info && data.grade_info !== "一般" && data.grade_info.trim() !== "") {
-                savedGradeInfo = data.grade_info; // 内部変数も更新
-                finalGrade = data.grade_info.trim() + " ";
-            } else if (savedGradeInfo) {
-                // 結果URLから取れなかった場合は既存の変数を維持
-                finalGrade = savedGradeInfo.trim() + " ";
+            if (!resultMatchesRace(currentHorses, data)) {
+                throw new Error("結果ページの馬名が出馬表と一致しません。別レースのURLではないか確認してください。");
             }
 
+            // グレードと頭数をUIに強制セット（「G1 18頭」形式。履歴から開いた「G3 16頭」に頭数が二重に付かないようにする）
             const gradeInput = document.getElementById('raceGrade');
-            if (gradeInput) {
-                // 画面のボックスを「G1 18頭」のように上書きする
-                gradeInput.value = `${finalGrade}${currentHorses.length}頭`.trim();
-            }
+            const gradeValue = buildGradeValue(data.grade_info, gradeInput ? gradeInput.value : savedGradeInfo, currentHorses.length);
+            if (data.grade_info && data.grade_info !== "一般" && data.grade_info.trim() !== "") savedGradeInfo = data.grade_info;
+            if (gradeInput) gradeInput.value = gradeValue;
 
-            let mergedCount = 0;
-            data.horses.forEach(resHorse => {
-                const target = currentHorses.find(h => h.umaban === resHorse.umaban);
-                if (target) {
-                    target.placing = resHorse.placing || "";
-                    target.finalOdds = parseFloat(resHorse.odds) || 0;
-                    target.finalPopular = resHorse.popular || "";
-                    // タイム・着差・後3F・コーナー通過順（既存プロパティとの衝突回避のためresult接頭辞）
-                    target.resultTime = resHorse.time || "";
-                    target.resultMargin = resHorse.margin || "";
-                    target.resultAgari = resHorse.agari || "";
-                    target.resultPassage = resHorse.passage || "";
-                    mergedCount++;
-                }
-            });
+            const mergedCount = mergeResultIntoHorses(currentHorses, data, isGradeRace, document.getElementById('raceCourse').textContent);
 
-            // 確定オッズベースで最終解析を実行
-            let tempHorses = JSON.parse(JSON.stringify(currentHorses));
-            tempHorses.forEach(h => {
-                 if (h.finalOdds !== undefined) {
-                     h.odds = parseFloat(h.finalOdds) || 0;
-                 }
-            });
-            const tempRes = analyzeRace(tempHorses, isGradeRace, document.getElementById('raceCourse').textContent);
-
-            currentHorses.forEach(h => {
-                 const fh = tempRes.horses.find(x => x.umaban === h.umaban);
-                 if (fh) {
-                     h.finalEv = fh.ev;
-                     h.finalCls = fh.cls;
-                 }
-            });
-
-            lastResultData = data;
+            lastResultData = slimResult(data);
             resultStatusText.textContent = `✅ ${mergedCount}頭の結果を合体し、最終解析を完了しました！`;
             setTimeout(()=> { resultStatusText.textContent = ""; }, 5000);
             saveToHistory();
@@ -564,6 +572,116 @@ document.addEventListener('DOMContentLoaded', () => {
             mergeResultBtn.disabled = false;
             mergeResultBtn.textContent = "着順を合体する";
         }
+    });
+
+    // ===== 結果の自動特定・一括取得・一括CSV（2026-10-12） =====
+    // 履歴項目から netkeiba の結果ページURLを特定する。
+    // URLから直接導けない場合だけ、開催日＋場＋レース番号でnetkeibaのレース一覧から探す
+    async function findResultUrl(item) {
+        const direct = deriveResultUrl(item.url);
+        if (direct) return direct;
+        const date = raceDateOf(item).replace(/-/g, '');
+        const num = String(item.raceNum || '').replace(/\D/g, '');
+        if (!item.venue || !num) return null;
+        try {
+            const raceId = await resolveRaceIdByDate(`${item.venue}${num}R`, date);
+            return raceId ? `https://race.netkeiba.com/race/result.html?race_id=${raceId}` : null;
+        } catch (e) {
+            return null;
+        }
+    }
+
+    const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+    let batchRunning = false;
+
+    async function batchFetchResults({ silent = false } = {}) {
+        if (batchRunning) return;
+        const targets = getHistory().filter(h => isResultDue(h));
+        if (targets.length === 0) {
+            if (!silent) batchStatusText.textContent = "取得待ちのレースはありません（発走後10分未満のレースは次回）";
+            return;
+        }
+        batchRunning = true;
+        batchFetchResultsBtn.disabled = true;
+        let ok = 0, notReady = 0, failed = 0;
+        const failedNames = [];
+        try {
+            for (let i = 0; i < targets.length; i++) {
+                const item = targets[i];
+                const label = `${item.venue || ''}${item.raceNum || ''} ${item.raceName || ''}`.trim();
+                batchStatusText.textContent = `結果を取得中… ${i + 1}/${targets.length}（${label}）`;
+                try {
+                    const resUrl = await findResultUrl(item);
+                    if (!resUrl) throw new Error('結果ページを特定できません');
+                    const data = await fetchRaceData(resUrl, { errorMsg: '結果の取得に失敗', checkDataError: false });
+                    if (!isResultReady(data)) { notReady++; continue; }
+                    if (!resultMatchesRace(item.horses, data)) throw new Error('馬名が一致しません（別レースの可能性）');
+                    if (!safeSave(() => updateHistoryItem(item.url, applyResultToItem(item, data)))) break;
+                    ok++;
+                    // 画面に表示中のレースなら、表示側の状態も更新する
+                    if (item.url === lastFetchedUrl) restoreFromHistory(getHistoryItem(item.url), { keepPanel: true });
+                } catch (e) {
+                    failed++;
+                    failedNames.push(`${label}: ${e.message}`);
+                }
+                await sleep(800); // 取得先への負荷を抑える
+            }
+        } finally {
+            batchRunning = false;
+            batchFetchResultsBtn.disabled = false;
+            renderHistoryDropdown(lastFetchedUrl);
+        }
+        batchStatusText.textContent = `✅ 結果取得 ${ok}件 ／ 未確定 ${notReady}件 ／ 失敗 ${failed}件` +
+            (failedNames.length ? `（${failedNames.slice(0, 3).join('、')}${failedNames.length > 3 ? ' ほか' : ''}）` : '');
+    }
+
+    batchFetchResultsBtn.addEventListener('click', () => batchFetchResults());
+
+    // 自動取得: ページを開いている間、10分ごとに未取得分を取りに行く
+    let autoResultTimer = null;
+    autoResultCheck.addEventListener('change', (e) => {
+        if (autoResultTimer) clearInterval(autoResultTimer);
+        autoResultTimer = null;
+        if (e.target.checked) {
+            batchFetchResults();
+            autoResultTimer = setInterval(() => batchFetchResults({ silent: true }), 10 * 60000);
+        }
+    });
+
+    // 結果済み・未出力のレースを1つのCSVにまとめて出力
+    batchExportCsvBtn.addEventListener('click', () => {
+        const items = getHistory()
+            .filter(h => hasResult(h) && !h.isExported)
+            .sort((a, b) => (raceDateOf(a) + (a.raceStartTime || '') + (a.venue || '')).localeCompare(raceDateOf(b) + (b.raceStartTime || '') + (b.venue || '')));
+        if (items.length === 0) return;
+
+        const ctxList = items.map(item => {
+            // 購入時オッズで解析し直してクラス/EV/MAO/実行フラグを確定させる（保存時点の解析漏れ・古い解析を防ぐ）
+            const horses = JSON.parse(JSON.stringify(item.horses));
+            analyzeRace(horses, item.isGradeRace || false, item.courseInfo || "");
+            return {
+                raceName: (item.raceName || '').replace(/,/g, ''),
+                venueStr: (item.venue || '-').replace(/,/g, ''),
+                courseInfo: (item.courseInfo || '').replace(/,/g, ''),
+                gradeStr: (item.gradeInfo || `${horses.length}頭`).replace(/,/g, ''),
+                dateStr: raceDateOf(item),
+                horses,
+                lastResultData: item.result,
+                raceStartTime: item.raceStartTime || "",
+                oddsUpdatedAt: item.oddsUpdatedAt ? new Date(item.oddsUpdatedAt) : null,
+                raceWeather: item.raceWeather || "",
+                raceBaba: item.raceBaba || ""
+            };
+        });
+        const first = raceDateOf(items[0]);
+        const last = raceDateOf(items[items.length - 1]);
+        const span = first === last ? first : `${first}_${last}`;
+        exportCsvMulti(ctxList, `SS-Engine_まとめ_${span}_${items.length}R.csv`);
+
+        safeSave(() => markExportedMany(items.map(h => h.url)));
+        renderHistoryDropdown(lastFetchedUrl);
+        const pending = getHistory().filter(h => !hasResult(h)).length;
+        batchStatusText.textContent = `✅ ${items.length}レースを1つのCSVに出力しました` + (pending ? `（結果未取得の${pending}レースは含めていません）` : '');
     });
 
     // CSV Download
@@ -586,9 +704,9 @@ document.addEventListener('DOMContentLoaded', () => {
         exportCsv({ raceName, venueStr: (currentVenue || "-").replace(/,/g, ''), courseInfo, gradeStr, dateStr, horses: currentHorses, lastResultData, raceStartTime, oddsUpdatedAt, raceWeather, raceBaba });
 
         // ▼ 追加: CSV出力が完了したことを履歴に記録し、UIを更新する
-        if (markExported(lastFetchedUrl)) {
-            renderHistoryDropdown(lastFetchedUrl);
-        }
+        let marked = false;
+        safeSave(() => { marked = markExported(lastFetchedUrl); });
+        if (marked) renderHistoryDropdown(lastFetchedUrl);
     });
 
     // JRA Odds Batch Input Logic (Revised: Search-based Matching)

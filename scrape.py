@@ -81,7 +81,12 @@ class handler(BaseHTTPRequestHandler):
         # 「福島11R」のような場名＋レース番号からURLを解決するモード
         if resolve_query and not url:
             try:
-                data = self.resolve_race_url(resolve_query)
+                date_q = query_components.get('date', [None])[0]
+                if date_q:
+                    # 開催日指定: 結果の自動取得用。netkeibaのその日のレース一覧から race_id を引く
+                    data = self.resolve_race_url_by_date(resolve_query, date_q)
+                else:
+                    data = self.resolve_race_url(resolve_query)
             except Exception as e:
                 data = {"error": "URL解決に失敗しました: " + str(e)}
             self.wfile.write(json.dumps(data, ensure_ascii=False).encode('utf-8'))
@@ -512,12 +517,23 @@ class handler(BaseHTTPRequestHandler):
             "source": "jra",
         }
 
-    def resolve_race_url_netkeiba(self, venue, race_num):
-        """netkeibaの開催日別レース一覧からレースURLを解決する（JRA失敗時のフォールバック）。"""
+    def resolve_race_url_by_date(self, query_text, date_str):
+        """開催日(YYYYMMDD)を指定して「東京11R」等から netkeiba の race_id を解決する（結果の自動取得用）。"""
+        venue, race_num = self.parse_venue_race(query_text)
+        if not venue or not race_num:
+            return {"error": f"場名・レース番号を認識できませんでした: {query_text}"}
+        if not re.fullmatch(r'\d{8}', date_str or ''):
+            return {"error": f"開催日の形式が不正です（YYYYMMDD）: {date_str}"}
+        target = datetime.strptime(date_str, "%Y%m%d").replace(tzinfo=JST)
+        return self.resolve_race_url_netkeiba(venue, race_num, dates=[target])
+
+    def resolve_race_url_netkeiba(self, venue, race_num, dates=None):
+        """netkeibaの開催日別レース一覧からレースURLを解決する（JRA失敗時のフォールバック）。
+        dates を渡すとその日付だけを探す（結果の自動取得用）。"""
         place_code = VENUE_CODE[venue]
         headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"}
 
-        for target_date in self.build_candidate_dates():
+        for target_date in (dates or self.build_candidate_dates()):
             date_str = target_date.strftime("%Y%m%d")
             try:
                 res = requests.get(

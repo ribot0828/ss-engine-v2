@@ -6,7 +6,8 @@
 - `index.html` / `app.js` / `style.css` — フロントエンドUI（フェッチ・履歴・CSV出力）
 - `logic.js` — コアロジック（`analyzeRace`, `SCORE_MAP`, `UNIT_TABLE`, クラス分類、`LOGIC_VERSION`）
 - `scrape.py` / `api.js` — 出馬表スクレイピング（netkeiba）のPythonバックエンド
-- `csv.js` / `history.js` / `xpost.js` — CSV出力・履歴保存・X投稿補助
+- `csv.js` / `history.js` / `xpost.js` — CSV出力（1レース／複数レースまとめ）・履歴保存・X投稿補助
+- `results.js` — 結果の自動特定・合体（2026-10-12〜）。出馬表URLから netkeiba 結果URLを導く（netkeiba は race_id、JRAスマホ版は CNAME の22桁 `01+場2+年4+回2+日目2+R2+開催日8` → `年+場+回+日目+R`）。導けない場合は `/api/index?resolve=東京11R&date=YYYYMMDD` で引く。馬名一致率で別レースへの誤紐づけを防ぐ
 - `vercel.json` — Vercelデプロイ設定（静的 + Python サーバーレス、`/api/index`→scrape.py）
 
 ## 制約・注意
@@ -19,6 +20,7 @@
 
 ## よくある作業
 - ロジック（スコア・EV・クラス分類・優先順位・ユニット配分）の変更 → `logic.js` を見る。まずObsidian仕様書で現行値を確認。
-- UI・表示・CSV出力・履歴の変更 → `app.js` / `index.html` / `style.css` / `csv.js` / `history.js`
+- UI・表示・CSV出力・履歴の変更 → `app.js` / `index.html` / `style.css` / `csv.js` / `history.js` / `results.js`
+- 履歴（localStorage `ss_engine_history`）は上限400件。**未出力のレースは自動削除しない**（2026-10-12、旧20件上限で3日開催の土曜分が消えた事故の対策）。結果の払戻は各項目の `result` に保存される
 - 出馬表取得・スクレイピング周りの変更 → `scrape.py` / `api.js`
 - 週次のパラメータ改善サイクル（Gemini提案→査定→実装）に関わる依頼 → Obsidian `20_Projects/SS-Engine/Process/` の開発日誌群を先に確認

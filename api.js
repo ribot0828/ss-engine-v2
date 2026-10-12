@@ -19,6 +19,14 @@ export function isVenueRacePattern(text) {
     return VENUE_NAMES.some(v => t.includes(v)) && /[0-9０-９]/.test(t);
 }
 
+// 開催日(YYYYMMDD)＋場名＋レース番号から netkeiba の race_id を引く（結果の自動取得用）。見つからなければ null
+export async function resolveRaceIdByDate(query, dateYmd) {
+    const res = await fetch(`/api/index?resolve=${encodeURIComponent(query)}&date=${encodeURIComponent(dateYmd)}`);
+    if (!res.ok) return null;
+    const data = await res.json();
+    return data && !data.error && data.race_id ? data.race_id : null;
+}
+
 // 場名＋レース番号からnetkeibaのURLを解決
 export async function resolveRaceUrl(query) {
     const res = await fetch(`/api/index?resolve=${encodeURIComponent(query)}`);
