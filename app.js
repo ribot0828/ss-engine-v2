@@ -1,10 +1,10 @@
 // SS-Engine アプリケーション オーケストレーション（DOM配線・描画）
-import { analyzeRace } from './logic.js?v=5.45.0';
-import { fetchRaceData, isVenueRacePattern, resolveRaceUrl, resolveRaceIdByDate } from './api.js?v=5.45.0';
-import { loadHistory, getHistory, getHistoryItem, saveHistory, updateHistoryItem, deleteHistory, markExported, markExportedMany } from './history.js?v=5.45.0';
-import { buildXPostText } from './xpost.js?v=5.45.0';
-import { exportCsv, exportCsvMulti } from './csv.js?v=5.45.0';
-import { deriveResultUrl, isResultReady, resultMatchesRace, slimResult, mergeResultIntoHorses, buildGradeValue, applyResultToItem, hasResult, raceDateOf, isResultDue } from './results.js?v=5.45.0';
+import { analyzeRace } from './logic.js?v=5.46.0';
+import { fetchRaceData, isVenueRacePattern, resolveRaceUrl, resolveRaceIdByDate } from './api.js?v=5.46.0';
+import { loadHistory, getHistory, getHistoryItem, saveHistory, updateHistoryItem, deleteHistory, markExported, markExportedMany } from './history.js?v=5.46.0';
+import { buildXPostText } from './xpost.js?v=5.46.0';
+import { exportCsv, exportCsvMulti } from './csv.js?v=5.46.0';
+import { deriveResultUrl, isResultReady, resultMatchesRace, slimResult, mergeResultIntoHorses, buildGradeValue, applyResultToItem, hasResult, raceDateOf, isResultDue } from './results.js?v=5.46.0';
 
 document.addEventListener('DOMContentLoaded', () => {
     const fetchBtn = document.getElementById('fetchBtn');
@@ -395,15 +395,10 @@ document.addEventListener('DOMContentLoaded', () => {
                 const normalAlloc = `${unitStr}(${h.unit * 100}円)`;
                 // 小資金モード配分（2026-07-19〜 推奨度連動 V5'）: 単勝優先順位（ATTACK_PRIORITY順）で並ぶ
                 // winTargets の先頭1点のみ購入。SS=3U(300円)／SSS・S=1U(100円)／Low=ノーベット。
-                // 根拠: backtest_r3_stake_variants.py V5'（liveOnly回収227.1%・DD>9000円確率63.2%→16.4%）
-                // 'SSS'→'SS'→'S'の順で判定（includes('SS')はSSSにもマッチするため）
+                // 2026-11-02〜 ダ1401m+はSSも1U（h26）。ユニットは logic.js の smallFundUnits が正
                 let smallFundAlloc = `-`;
-                if (idx === 0) {
-                    const rec = res.recommendation || '';
-                    if (rec.includes('SSS')) smallFundAlloc = `1U(100円)★`;
-                    else if (rec.includes('SS')) smallFundAlloc = `3U(300円)★`;
-                    else if (rec.includes('S')) smallFundAlloc = `1U(100円)★`;
-                    else smallFundAlloc = `-`;
+                if (idx === 0 && res.smallFundUnits > 0) {
+                    smallFundAlloc = `${res.smallFundUnits}U(${res.smallFundUnits * 100}円)★`;
                 }
                 winList.innerHTML += `<li class="font-bold text-yellow-300">馬番 ${h.umaban} [${h.cls}] : 推奨 ${unitStr} / 期待値 ${h.ev.toFixed(3)} ${h.amberPassed ? "✅" : "❌"} (MAO: ${h.mao.toFixed(1)})
                     <div class="font-normal text-xs text-slate-300 mt-0.5">通常: ${normalAlloc} ｜ 小資金: ${smallFundAlloc}</div></li>`;

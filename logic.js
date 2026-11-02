@@ -1,6 +1,6 @@
 // SS-Engine Core Logic（バージョンは下の LOGIC_VERSION が正）
 
-export const LOGIC_VERSION = "v5.35";
+export const LOGIC_VERSION = "v5.36";
 
 const SCORE_MAP = {
     'S': 100, 'A': 65, 'B': 40, 'C': 20, 'D': 10, 'E': 3, 'F': 0.5
@@ -228,6 +228,11 @@ export function analyzeRace(horses, isGradeRace = false, courseInfo = "") {
         h.unit = u;
     });
 
+    // 2026-11-02 [h26] 小資金(R3)ステーク: 単勝1点目のみ SS=3U／SSS・S=1U／Low=0。ダ1401m+は max(1, floor(U/2))＝SS 3U→1U
+    // （重賞はR3では半減しない＝計測継続中。analyzer.js r3StakeUnits 整合）
+    let smallFundUnits = winTargets.length > 0 ? ({ SSS: 1, SS: 3, S: 1 }[recLevel] || 0) : 0;
+    if (smallFundUnits > 0 && isDirtLong) smallFundUnits = Math.max(1, Math.floor(smallFundUnits / 2));
+
     // ② ワイド (Insurance) 
     // ユーザ指定により軸不在時は単勝のみ
     let wideTargets = [];
@@ -288,6 +293,7 @@ export function analyzeRace(horses, isGradeRace = false, courseInfo = "") {
         recommendation,
         skipReason,
         winTargets,
+        smallFundUnits,
         wideTargets,
         sanrenpuku,
         horses
