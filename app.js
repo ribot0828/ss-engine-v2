@@ -1,10 +1,13 @@
 // SS-Engine アプリケーション オーケストレーション（DOM配線・描画）
-import { analyzeRace } from './logic.js?v=5.46.0';
-import { fetchRaceData, isVenueRacePattern, resolveRaceUrl, resolveRaceIdByDate } from './api.js?v=5.46.0';
-import { loadHistory, getHistory, getHistoryItem, saveHistory, updateHistoryItem, deleteHistory, markExported, markExportedMany } from './history.js?v=5.46.0';
-import { buildXPostText } from './xpost.js?v=5.46.0';
-import { exportCsv, exportCsvMulti } from './csv.js?v=5.46.0';
-import { deriveResultUrl, isResultReady, resultMatchesRace, slimResult, mergeResultIntoHorses, buildGradeValue, applyResultToItem, hasResult, raceDateOf, isResultDue } from './results.js?v=5.46.0';
+import { analyzeRace } from './logic.js?v=5.47.0';
+import { fetchRaceData, isVenueRacePattern, resolveRaceUrl, resolveRaceIdByDate } from './api.js?v=5.47.0';
+import { loadHistory, getHistory, getHistoryItem, saveHistory, updateHistoryItem, deleteHistory, markExported, markExportedMany } from './history.js?v=5.47.0';
+import { buildXPostText } from './xpost.js?v=5.47.0';
+import { exportCsv, exportCsvMulti } from './csv.js?v=5.47.0';
+import { deriveResultUrl, isResultReady, resultMatchesRace, slimResult, mergeResultIntoHorses, buildGradeValue, applyResultToItem, hasResult, raceDateOf, isResultDue } from './results.js?v=5.47.0';
+
+// 2026-11-06 [h29] 馬のタイプタグ（記録のみ・計算には使わない）。型がはっきりしている馬にだけ付け、空欄は「普通」扱い
+const HORSE_TYPES = [['', '－'], ['勝', '勝'], ['堅', '堅'], ['穴', '穴']];
 
 document.addEventListener('DOMContentLoaded', () => {
     const fetchBtn = document.getElementById('fetchBtn');
@@ -332,6 +335,9 @@ document.addEventListener('DOMContentLoaded', () => {
         } else if (e.target.matches('.rank-select')) {
             const idx = parseInt(e.target.dataset.idx);
             currentHorses[idx].rank = e.target.value;
+        } else if (e.target.matches('.type-select')) {
+            const idx = parseInt(e.target.dataset.idx);
+            currentHorses[idx].type = e.target.value;
         } else if (e.target.matches('.audit-checkbox')) {
             const idx = parseInt(e.target.dataset.idx);
             currentHorses[idx].passedStrikerValidation = e.target.checked;
@@ -344,9 +350,12 @@ document.addEventListener('DOMContentLoaded', () => {
             const tr = document.createElement('tr');
             tr.innerHTML = `
                 <td class="px-2 py-1 border-b border-slate-700 text-center text-sm">${horse.umaban}</td>
-                <td class="px-2 py-1 border-b border-slate-700 text-center">
+                <td class="px-2 py-1 border-b border-slate-700 text-center whitespace-nowrap">
                     <select class="bg-slate-800 text-white px-1 py-1 rounded rank-select border border-slate-600 text-sm w-12" data-idx="${idx}">
                         ${['S','A','B','C','D','E','F'].map(r => `<option value="${r}" ${horse.rank === r ? 'selected' : ''}>${r}</option>`).join('')}
+                    </select>
+                    <select class="bg-slate-800 text-white px-1 py-1 rounded type-select border border-slate-600 text-sm w-12" data-idx="${idx}" title="タイプ（記録のみ・h29）">
+                        ${HORSE_TYPES.map(([v, label]) => `<option value="${v}" ${(horse.type || '') === v ? 'selected' : ''}>${label}</option>`).join('')}
                     </select>
                 </td>
                 <td class="px-2 py-1 border-b border-slate-700 horse-name font-bold text-sm">${horse.name}</td>

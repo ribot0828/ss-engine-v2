@@ -1,7 +1,7 @@
 // CSVエクスポート（Excel用・BOM付きCRLF）
-import { LOGIC_VERSION } from './logic.js?v=5.46.0';
+import { LOGIC_VERSION } from './logic.js?v=5.47.0';
 
-const CSV_HEADER = "日付,開催場所,レース名,コース詳細,グレード・頭数,馬番,馬名,購入時人気,購入時オッズ,評価,購入時期待値,購入時クラス,近走監査,最終確定人気,最終確定オッズ,最終確定期待値,最終確定クラス,着順,MAO,実行フラグ,単勝払戻,ワイド払戻,馬連払戻,三連複払戻,三連単払戻,発走時刻,オッズ最終更新時刻,天候,馬場状態,走破タイム,着差,上がり3F,通過順,ロジックVer\r\n";
+const CSV_HEADER = "日付,開催場所,レース名,コース詳細,グレード・頭数,馬番,馬名,購入時人気,購入時オッズ,評価,購入時期待値,購入時クラス,近走監査,最終確定人気,最終確定オッズ,最終確定期待値,最終確定クラス,着順,MAO,実行フラグ,単勝払戻,ワイド払戻,馬連払戻,三連複払戻,三連単払戻,発走時刻,オッズ最終更新時刻,天候,馬場状態,走破タイム,着差,上がり3F,通過順,ロジックVer,タイプ\r\n";
 
 // CSVを破壊する文字（改行、カンマ）をスペースに置換する
 const sanitize = (val) => {
@@ -57,7 +57,9 @@ function buildRaceRows({ raceName, venueStr, courseInfo, gradeStr, dateStr, hors
             tanshoPay, widePay, umarenPay, sanrenPay, sanrentanPay,
             raceStartTime || "-", oddsUpdatedAtStr, raceWeather || "-", raceBaba || "-",
             h.resultTime || "-", h.resultMargin || "-", h.resultAgari || "-", h.resultPassage || "-",
-            LOGIC_VERSION
+            LOGIC_VERSION,
+            // 2026-11-06 [h29] タイプタグ（勝=勝ち切り型／堅=堅実型・2〜3着型／穴=一発型／-=未記入）
+            h.type || "-"
         ];
         rows += rawRow.map(item => sanitize(item)).join(',') + "\r\n";
     });

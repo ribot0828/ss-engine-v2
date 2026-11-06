@@ -1,5 +1,5 @@
 // レース結果の取得・紐づけ（手動合体と一括取得の共通処理）
-import { analyzeRace } from './logic.js?v=5.46.0';
+import { analyzeRace } from './logic.js?v=5.47.0';
 
 // 履歴の保存URLから netkeiba の結果ページURLを導く。導けなければ null
 // - netkeiba: race_id=12桁 をそのまま使う
